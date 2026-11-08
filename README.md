@@ -5,15 +5,18 @@ A small browser-based study app for the eight ICF core competencies. Practice ex
 ## Features
 
 - Title recall with progressive word hints, Pass and separate counts for answers with and without hints.
-- Eight original multiple-choice questions, with an explanation beside each option after answering.
+- 32 original fictional coaching scenarios, four per primary competency, each with four plausible responses and a contextual explanation beside each option.
+- Single-select best-fit practice with separate strongest-fit and reasonable-fit credit. The competency, official definition and citations appear only after answering.
 - A short fictional branching conversation with source-backed feedback.
 - Eight-item mixed practice across all competencies.
 - Exam rehearsal with eight ordered title fields and three explanation points per competency. Untimed by default, with an optional two-hour timer, saved drafts and a text-copy download.
-- Local progress and a simple review schedule: help or a missed answer returns in 10 minutes; successive correct answers without hints follow 1, 3, then 7 days.
+- Local progress and a simple review schedule: help, a title mismatch or a less suitable response returns in 10 minutes; titles without hints and both question-credit categories follow 1, 3, then 7 days.
 - Light by default, remembered light/dark choices, and an explicit System setting.
 - Responsive layouts, keyboard controls, visible focus, screen-reader messages and reduced-motion support.
 
 Titles are checked for the official words in order, ignoring capitalization, extra spaces and punctuation around words. C1-C8 are display labels; type only the title. Exam explanations are preserved for self-review, not automatically graded.
+
+Question and option order vary. The scenario picker and review list use narrative labels, without revealing the evaluated competency. Each item has one authored strongest fit; some have other reasonable responses that earn real credit and advance the review schedule. A reasonable response does not increment strongest-fit totals or count as missed. Less suitable means less suitable in the stated moment, not a universally wrong coaching behavior. These are study judgments, not validated ICF exam keys or assessment percentages.
 
 ## Run locally
 
@@ -48,6 +51,8 @@ The renderer also accepts `-BrowserPath` for another installed Chromium browser.
 ## Saved data
 
 Study results, counters, review dates, conversation counts and exam answers stay in `localStorage` under `icf-practice-room-v1`. Theme choices use the separate `icf-study-theme-v1` key. The usage-statistics preference uses `icf-study-usage-opt-out-v1`. Reset progress requires confirmation and leaves theme and privacy choices unchanged.
+
+Earlier `q1`-`q8` question records are retained as historical results in all-time counts. The expanded scenarios use new stable IDs and start their own review schedules. Existing recall results and exam drafts are preserved. Older saved records gain a zero-valued reasonable-fit counter when loaded; no storage reset is required.
 
 The exam timer stores a real deadline. Refreshing or returning later does not restart it; expiration saves the answers and opens review. Drafts save while editing. Storage failures are shown in the app, and a text download provides a backup.
 

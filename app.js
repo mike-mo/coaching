@@ -9,8 +9,10 @@
   const empty = () => ({version:1, items:{}, scenarios:0, exam:null, hintedSuccessIndex:0});
   const hintedSuccessMessages = ["You got it!", "That's it!", "Nice work!"];
   const hintedSuccessSupport = "Hints help you learn. Keep practicing until you can remember it without them.";
-  const allIds = D.competencies.map(c => `r${c.id}`).concat(D.questions.map(q => q.id));
+  const legacyQuestionIds = Array.from({length:8},(_,i)=>`q${i+1}`);
+  const allIds = D.competencies.map(c => `r${c.id}`).concat(D.questions.map(q => q.id),legacyQuestionIds);
   let state = load();
+  let questionOrder = [];
   let view = "home", session = null, active = null;
   let scenarioNode = D.scenario.start, history = [], branchChoice = null;
   let saveFailed = false;
@@ -33,9 +35,11 @@
             s.hintedSuccessIndex < 0 || s.hintedSuccessIndex >= hintedSuccessMessages.length))) throw new Error("Invalid study data");
       for (const [id,item] of Object.entries(s.items)) {
         if (!allIds.includes(id) || !item || counters.some(k => !Number.isInteger(item[k]) || item[k] < 0) ||
-            !Number.isFinite(item.due) || item.due < 0 || !["unaided","assisted","recognition","missed"].includes(item.last)) {
+            (item.reasonable !== undefined && (!Number.isInteger(item.reasonable) || item.reasonable < 0)) ||
+            !Number.isFinite(item.due) || item.due < 0 || !["unaided","assisted","recognition","reasonable","missed"].includes(item.last)) {
           throw new Error("Invalid saved item");
         }
+        item.reasonable = item.reasonable ?? 0;
       }
       s.exam = s.exam || null;
       s.hintedSuccessIndex = s.hintedSuccessIndex ?? 0;
@@ -50,10 +54,10 @@
     catch { saveFailed=true; storageError("Your browser couldn't save your progress or exam answers. Keep this tab open. Refreshing or closing it may lose your work. In Exam rehearsal, choose Save a text copy for a backup."); return false; }
   }
   function record(id, outcome) {
-    const p = state.items[id] || {unaided:0, assisted:0, recognition:0, missed:0, streak:0};
+    const p = state.items[id] || {unaided:0, assisted:0, recognition:0, reasonable:0, missed:0, streak:0};
     p[outcome]++;
     p.last = outcome;
-    const success = outcome === "unaided" || outcome === "recognition";
+    const success = outcome === "unaided" || outcome === "recognition" || outcome === "reasonable";
     p.streak = success ? p.streak + 1 : 0;
     const days = [1,3,7][Math.min(p.streak - 1,2)];
     p.due = Date.now() + (success ? days * 86400000 : 600000);
@@ -75,17 +79,29 @@
     isVisible:()=>view==="exam",onStarted:()=>usage?.begin("exam"),
     onCompleted:()=>usage?.complete("exam"),onFinished:()=>{if(view==="home")renderHome();},citation});
   const totals = field => Object.values(state.items).reduce((n,p) => n+p[field],0);
-  const outcomeLabels = {unaided:"Without hints",assisted:"With hints",recognition:"Correct answer",missed:"Wrong answer"};
+  const outcomeLabels = {unaided:"Without hints",assisted:"With hints",recognition:"Strongest fit",reasonable:"Reasonable fit",missed:"Needs another look"};
   const isDue = id => !state.items[id] || state.items[id].due <= Date.now();
+  function shuffle(values) {
+    const result=[...values];
+    for(let i=result.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [result[i],result[j]]=[result[j],result[i]];
+    }
+    return result;
+  }
+  function arrangeQuestions() {
+    questionOrder=shuffle(D.questions).sort((a,b)=>(state.items[a.id]?.due || 0)-(state.items[b.id]?.due || 0));
+  }
   function practiceItems(type = "mixed") {
-    return D.competencies.flatMap(c => [{id:`r${c.id}`,type:"recall",c:c.id},
-      ...D.questions.filter(q => q.c === c.id).map(q => ({id:q.id,type:"questions",c:c.id}))])
-      .filter(i => type==="mixed" || i.type===type);
+    const titles=D.competencies.map(c=>({id:`r${c.id}`,type:"recall",c:c.id}));
+    const questions=questionOrder.map(q=>({id:q.id,type:"questions",c:q.c}));
+    return type==="recall"?titles:type==="questions"?questions:titles.concat(questions);
   }
   function navigate(next) {
     view=next; session=null; active=null;
     if (next==="recall" || next==="questions") usage?.begin(next==="recall"?"titles":"questions");
     if (next==="scenario") usage?.begin("conversation");
+    if (next==="questions") arrangeQuestions();
     if (next==="scenario") { scenarioNode=D.scenario.start; history=[]; branchChoice=null; }
     render(); focus();
   }
@@ -111,19 +127,21 @@
       <section class="practice-setup" aria-labelledby="practice-setup-title"><h2 id="practice-setup-title">Choose your practice</h2>
       <section class="grid practice-grid" aria-label="Title and question practice">
       <article class="experience"><span class="number">01 / TITLES</span><h3>Core competency practice</h3><p>Try a title from memory, use a hint to show one word at a time, or choose Pass to see the full title.</p><button data-start="recall">Practice titles</button></article>
-      <article class="experience"><span class="number">02 / QUESTIONS</span><h3>Coaching questions</h3><p>Pick a reply and compare the reasons for each choice. There's one question per competency.</p><button data-start="questions">Answer questions</button></article></section>
+      <article class="experience"><span class="number">02 / QUESTIONS</span><h3>Coaching questions</h3><p>${D.questions.length} fictional scenarios, each with four possible replies. Choose the best fit for the moment. Other reasonable replies earn credit too.</p><button data-start="questions">Answer questions</button></article></section>
       <div class="mixed-start"><button class="primary" id="start-mixed">Start mixed practice</button><p class="muted">Eight items across all competencies, mixing titles and questions.</p></div>
-      <details class="review-list"><summary>Your review dates · ${items.length} items</summary><p class="muted">Your last result and next review for each title and question. "New" means you haven't tried it. You can practice any time.</p>${items.map(item=>`<div class="review-row"><span>${titleLabel(comp(item.c))}<small>${item.type==="recall"?"Title practice":"Coaching question"}${state.items[item.id] ? ` · last time: ${outcomeLabels[state.items[item.id].last]}` : ""}</small></span><span>${dueLabel(item.id)}</span></div>`).join("")}</details></section>
+      <details class="review-list"><summary>Your review dates · ${items.length} items</summary><p class="muted">Your last result and next review for each title and scenario. "New" means you haven't tried it. You can practice any time.</p>${items.map(item=>`<div class="review-row"><span>${item.type==="recall"?titleLabel(comp(item.c)):escape(D.questions.find(q=>q.id===item.id).label)}<small>${item.type==="recall"?"Title practice":"Coaching scenario"}${state.items[item.id] ? ` · last time: ${outcomeLabels[state.items[item.id].last]}` : ""}</small></span><span>${dueLabel(item.id)}</span></div>`).join("")}</details></section>
       <section class="independent-practice" aria-labelledby="independent-title"><h2 id="independent-title">Conversation &amp; exam</h2><div class="grid practice-grid">
       <article class="experience"><span class="number">03 / CONVERSATION</span><h3>Try a conversation</h3><p>Choose what to say to a fictional client. See a possible reaction and review the choices you made.</p><button data-start="scenario">Start conversation</button></article>
       <article class="experience"><span class="number">WRITTEN EXAM</span><h3>Exam rehearsal</h3><p>Write all eight titles in order and three points for each. Practice without a timer, or use the optional two-hour timer.</p><button data-start="exam">${state.exam?.status==="draft"?"Resume rehearsal":state.exam?"Review rehearsal":"Start exam rehearsal"}</button></article></div></section>
-      <h2 class="progress-heading">Across all your practice</h2><section class="stats" aria-label="Title practice and question counts"><div class="stat"><strong>${totals("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${totals("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${totals("recognition")}</strong><span>Questions correct</span></div></section>
+      <h2 class="progress-heading">Across all your practice</h2><section class="stats question-credit-stats" aria-label="Title practice and question credit counts"><div class="stat"><strong>${totals("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${totals("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${totals("recognition")}</strong><span>Strongest fit</span></div><div class="stat"><strong>${totals("reasonable")}</strong><span>Reasonable fit</span></div></section>
+      ${legacyQuestionIds.some(id=>state.items[id])?'<p class="muted">Earlier question results remain in your all-time counts. The new scenarios have their own review dates.</p>':""}
       <div class="reset-line"><span>Saved in this browser. ${state.scenarios} conversation${state.scenarios===1?"":"s"} completed.</span><button id="reset">Reset progress</button></div>`;
     document.querySelectorAll("[data-start]").forEach(b => b.onclick = () => navigate(b.dataset.start));
     document.querySelector("#start-mixed").onclick = () => startSession("mixed",8);
     document.querySelector("#reset").onclick = () => document.querySelector("#reset-dialog").showModal();
   }
   function startSession(type, count) {
+    arrangeQuestions();
     let items = practiceItems(type);
     items.sort((a,b)=>(state.items[a.id]?.due || 0)-(state.items[b.id]?.due || 0));
     // Interleave modalities and spread mixed practice across competencies.
@@ -134,11 +152,13 @@
       for (const item of ranked) {
         if (!seen.has(item.c)) { chosen.push(item); seen.add(item.c); }
       }
-      const spread=chosen.map((item,index)=>{
-        if (index%2===1 && item.type==="recall") return ranked.find(i=>i.c===item.c && i.type==="questions") || item;
-        return item;
-      });
-      items=spread.concat(ranked.filter(item=>!spread.includes(item)));
+      const spread=chosen.map((item,index)=>ranked.find(i=>i.c===item.c && i.type===(index%2===0?"recall":"questions")));
+      if(spread.some(item=>!item)){
+        console.error("Mixed practice is missing a required modality.");
+        announce("Mixed practice is unavailable. Try title or question practice instead.");
+        return;
+      }
+      items=shuffle(spread).concat(shuffle(ranked.filter(item=>!spread.includes(item))));
     }
     session={items:items.slice(0,count),index:0,results:[],type};
     usage?.begin(type==="recall"?"titles":type);
@@ -151,8 +171,10 @@
     items.sort((a,b)=>(state.items[a.id]?.due || 0)-(state.items[b.id]?.due || 0));
     return items[0];
   }
-  function makeActive(item) { return {item,attempt:"",hints:0,revealed:false,done:false,outcome:null,selected:null,assistLogged:false}; }
+  function makeActive(item) { return {item,attempt:"",hints:0,revealed:false,done:false,outcome:null,selected:null,assistLogged:false,
+    optionOrder:item.type==="questions"?shuffle(D.questions.find(q=>q.id===item.id).options.map((_,i)=>i)):null}; }
   function renderStudy() {
+    announce("");
     if (session && session.index>=session.items.length && session.items.length) return renderComplete();
     const item=active?.item || currentItem();
     if (!item) {
@@ -161,11 +183,17 @@
     }
     if (!active) active=makeActive(item);
     const recall=item.type==="recall";
-    const title=recall?"What's the title?":"Choose a reply.";
+    const title=recall?"What's the title?":"Choose the best fit.";
     main.innerHTML=`<p class="eyebrow">${session?.type==="mixed"?"Mixed practice":recall?"Core competency practice":"Coaching questions"}</p><h1>${title}</h1>
       ${session?`<div class="progress-bar" aria-label="Item ${session.index+1} of ${session.items.length}"><span style="width:${100*session.index/session.items.length}%"></span></div>`:""}
-      <div class="study-layout"><section class="card" id="study-card"></section><aside class="side-note"><h3>${recall?"Using hints and Pass":"About these questions"}</h3><p>${recall?"A hint shows another word. Pass shows the full title so you can check it before moving on. Either counts as 'With hints', even if you leave the answer blank. Capital letters, extra spaces and punctuation around words don't affect the title check.":"Pick the reply that fits this situation best. The other replies may work in a different situation; the reasons explain the difference."}</p><p>${recall?"There's no time limit.":"Picking from options is different from remembering without them. There's no time limit."}</p><details><summary>When to practice again</summary><p>Try again in 10 minutes if you miss an answer or use help. Correct titles without hints and correct question answers move to 1, 3, then 7 days between reviews if you keep getting them right. New items are ready now.</p></details><button id="leave-practice">${session?"End practice":"Back to home"}</button></aside></div>`;
+      ${!recall && !session?`<div class="toolbar"><div class="field"><label for="scenario-picker">Choose a scenario</label><select id="scenario-picker">${questionOrder.map(q=>`<option value="${q.id}" ${q.id===item.id?"selected":""}>${escape(q.label)} · ${dueLabel(q.id)}</option>`).join("")}</select></div><span class="muted">${D.questions.length} scenarios</span></div>`:""}
+      <div class="study-layout"><section class="card" id="study-card"></section><aside class="side-note"><h3>${recall?"Using hints and Pass":"About these questions"}</h3><p>${recall?"A hint shows another word. Pass shows the full title so you can check it before moving on. Either counts as 'With hints', even if you leave the answer blank. Capital letters, extra spaces and punctuation around words don't affect the title check.":"All scenarios are fictional. Choose the strongest response for this moment. Reasonable alternatives earn separate credit. After answering, you'll see the competency and the reasons for all four choices."}</p><p>${recall?"There's no time limit.":"Strongest and reasonable fits both advance your review schedule. Picking from options is different from recall. There's no time limit."}</p><details><summary>When to practice again</summary><p>Try again in 10 minutes after a title mismatch, hint, Pass or a less suitable response. Titles without hints and credited question responses move to 1, 3, then 7 days between reviews. New items are ready now.</p></details><button id="leave-practice">${session?"End practice":"Back to home"}</button></aside></div>`;
     document.querySelector("#leave-practice").onclick=()=>navigate("home");
+    document.querySelector("#scenario-picker")?.addEventListener("change",e=>{
+      const selected=practiceItems("questions").find(i=>i.id===e.target.value);
+      if(!selected){announce("That scenario is unavailable. Choose another.");return;}
+      active=makeActive(selected);renderStudy();focus();
+    });
     if(recall) renderRecall(); else renderQuestion();
   }
   function renderRecall() {
@@ -224,16 +252,22 @@
   function renderQuestion() {
     const a=active, q=D.questions.find(q=>q.id===a.item.id);
     const c=comp(q.c);
-    document.querySelector("#study-card").innerHTML=`<div class="card-head"><span>${session?`${session.index+1} / ${session.items.length}`:"Coaching question"}</span><span class="pill">C${q.c}</span></div><h2>${q.prompt}</h2>
-      ${a.done?`<div class="feedback ${a.selected===q.answer?"":"miss"}"><h3>${a.selected===q.answer?"Correct for this situation.":"Another reply fits better here."}</h3><p>${q.takeaway}</p><div class="competency-reference"><h4>${titleLabel(c)}</h4><p class="definition-label">Official definition</p><blockquote class="competency-definition">"${escape(c.definition)}"</blockquote>${citation(c.id,q.refs)}</div></div>`:""}
-      <div class="options">${q.options.map((o,i)=>`<button class="option ${a.selected===i?"selected":""} ${a.done && q.answer===i?"correct":""}" data-option="${i}" ${a.done?"disabled":""}><span class="letter">${"ABC"[i]}</span><span class="option-content"><span class="option-text">${o[0]}</span>${a.done?`${i===a.selected || i===q.answer?`<span class="option-result">${i===a.selected?"Your answer":""}${i===a.selected && i===q.answer?" · ":""}${i===q.answer?"Best response":""}</span>`:""}<span class="option-rationale">${o[1]}</span>`:""}</span></button>`).join("")}</div>
-      ${a.done?`<button class="primary" id="next-item" style="margin-top:18px">${session?"Continue":"Next question"}</button>`:citation(q.c,q.refs)}`;
+    const creditLabels={strongest:"Strongest fit",reasonable:"Reasonable fit",less:"Less suitable here"};
+    const heading=a.outcome==="recognition"?"Strongest fit for this moment.":a.outcome==="reasonable"?"Reasonable fit. Credit recorded.":"Another response fits this moment better.";
+    document.querySelector("#study-card").innerHTML=`<div class="card-head"><span>${session?`${session.index+1} / ${session.items.length}`:`Scenario ${questionOrder.findIndex(item=>item.id===q.id)+1} / ${D.questions.length}`}</span><span class="pill">Fictional</span></div><h2 class="scenario-prompt">${escape(q.prompt)}</h2>
+      ${a.done?`<div class="feedback ${a.outcome==="missed"?"miss":""}"><h3>${heading}</h3><p>${escape(q.takeaway)}</p><p class="muted">${a.outcome==="missed"?"Try this scenario again in 10 minutes.":`${outcomeLabels[a.outcome]} counts separately. Your review moves to the 1, 3, then 7 day schedule.`}</p><div class="competency-reference"><p class="definition-label">Primary focus</p><h4>${titleLabel(c)}</h4><p class="definition-label">Official definition</p><blockquote class="competency-definition">"${escape(c.definition)}"</blockquote>${citation(c.id,q.refs)}
+      ${q.also?.length?`<details><summary>Related behaviors</summary>${q.also.map(other=>`<h4>${titleLabel(comp(other.c))}</h4>${citation(other.c,other.refs)}`).join("")}</details>`:""}</div></div>`:""}
+      <div class="options">${a.optionOrder.map((i,position)=>{const o=q.options[i];return `<button class="option ${a.selected===i?"selected":""} ${a.done && o[2]==="strongest"?"correct":""}" data-option="${i}" ${a.done?"disabled":""}><span class="letter">${"ABCD"[position]}</span><span class="option-content"><span class="option-text">${escape(o[0])}</span>${a.done?`<span class="option-result">${creditLabels[o[2]]}${i===a.selected?" · Your answer":""}</span><span class="option-rationale">${escape(o[1])}</span>`:""}</span></button>`;}).join("")}</div>
+      ${a.done?`<button class="primary" id="next-item" style="margin-top:18px">${session?"Continue":"Next question"}</button>`:""}`;
     document.querySelectorAll("[data-option]").forEach(b=>b.onclick=()=>{
+      if(a.done)return;
       a.selected=Number(b.dataset.option); a.done=true;
-      a.outcome=a.selected===q.answer?"recognition":"missed";
+      a.outcome=q.options[a.selected][2]==="strongest"?"recognition":q.options[a.selected][2]==="reasonable"?"reasonable":"missed";
       record(a.item.id,a.outcome);
+      const chosen=document.querySelector("#scenario-picker option:checked");
+      if(chosen)chosen.textContent=`${q.label} · ${dueLabel(q.id)}`;
       if (!session) usage?.item("questions",a.item.id,D.questions.length);
-      renderQuestion();focus("#study-card .feedback h3");announce(a.outcome==="recognition"?"Correct answer. You can read the reason beside each option.":"Another reply fits better here. Your answer and the best response are labeled. You can read the reason beside each option.");
+      renderQuestion();focus("#study-card .feedback h3");announce(`${a.outcome==="recognition"?"Strongest fit.":a.outcome==="reasonable"?"Reasonable fit. Credit recorded.":"Another response fits this moment better."} ${titleLabel(c)}. You can read the reason beside each option.`);
     });
     if(a.done)document.querySelector("#next-item").onclick=nextItem;
   }
@@ -251,7 +285,7 @@
     usage?.complete(session.type==="recall"?"titles":session.type);
     const count=outcome=>session.results.filter(r=>r.outcome===outcome).length;
     const misses=session.results.filter(r=>r.missed).length;
-    main.innerHTML=`<p class="eyebrow">Mixed practice</p><h1>Practice complete.</h1><p class="lead">You finished ${session.results.length} practice items.</p><div class="stats"><div class="stat"><strong>${count("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${count("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${count("recognition")}</strong><span>Questions correct</span></div></div><p>${misses} wrong answer${misses===1?"":"s"}. If you missed an answer or used help, try it again in 10 minutes. Correct titles without hints and correct question answers follow the 1, 3, then 7 day schedule.</p><button class="primary" id="back-home">Back to home</button>`;
+    main.innerHTML=`<p class="eyebrow">Mixed practice</p><h1>Practice complete.</h1><p class="lead">You finished ${session.results.length} practice items.</p><div class="stats question-credit-stats"><div class="stat"><strong>${count("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${count("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${count("recognition")}</strong><span>Strongest fit</span></div><div class="stat"><strong>${count("reasonable")}</strong><span>Reasonable fit</span></div></div><p>${misses} item${misses===1?"":"s"} need another look. A less suitable response, title mismatch or help means reviewing in 10 minutes. Titles without hints and both credited question responses follow the 1, 3, then 7 day schedule.</p><button class="primary" id="back-home">Back to home</button>`;
     document.querySelector("#back-home").onclick=()=>navigate("home");
   }
   function renderScenario() {
@@ -283,6 +317,7 @@
     try {localStorage.removeItem(KEY);state=empty();saveFailed=false;exam.reset();warning.hidden=true;document.querySelector("#reset-dialog").close();navigate("home");announce("Study progress and rehearsal deleted.");}
     catch {document.querySelector("#reset-dialog").close();storageError("Your browser couldn't delete progress. You can remove it by clearing site data for this local address.");}
   };
+  arrangeQuestions();
   if (state.exam?.status==="draft") usage?.resume("exam");
   exam.expire();
   render();

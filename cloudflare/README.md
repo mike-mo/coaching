@@ -40,6 +40,8 @@ Use the Cloudflare dashboard's **Web Analytics** view for `smartify.space`, filt
 
 Add these Worker bindings without changing plans or enabling paid services:
 
+First enable Analytics Engine from **Workers & Pages > Analytics Engine** in the Cloudflare dashboard on the existing Free plan. Upload error 403, code 10089, means the service has not been enabled; signing in again does not resolve it. Stop if enablement requests a paid upgrade.
+
 | Binding | Configuration |
 | --- | --- |
 | `COACHING_USAGE` | Analytics Engine dataset `coaching_usage` |
@@ -105,7 +107,7 @@ References: [Analytics Engine setup](https://developers.cloudflare.com/analytics
 With Node.js 22 or newer, run from the repository root:
 
 ```powershell
-node --test cloudflare\worker.test.mjs cloudflare\analytics.test.mjs tools\analytics.test.mjs tools\share-card.test.mjs
+node --test cloudflare\worker.test.mjs cloudflare\analytics.test.mjs tools\analytics.test.mjs tools\questions.test.mjs tools\share-card.test.mjs
 ```
 
 The tests use built-in Node modules and mocked fetch calls. They do not modify DNS, deploy a Worker or send requests to the live domain. After deployment, verify the real HTTPS route, public assets, study interactions and existing-origin passthrough.
