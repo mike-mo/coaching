@@ -45,6 +45,12 @@ export default {
     }
 
     const responseHeaders = new Headers(upstream.headers);
+    if (/^text\/html(?:\s*;|$)/i.test(responseHeaders.get("content-type") || "")) {
+      const cacheControl = responseHeaders.get("cache-control") || "";
+      if (!cacheControl.split(",").some(directive => directive.trim().toLowerCase() === "no-transform")) {
+        responseHeaders.set("cache-control", `${cacheControl ? cacheControl + ", " : ""}no-transform`);
+      }
+    }
     const location = responseHeaders.get("location");
     if (location && URL.canParse(location, upstreamUrl)) {
       const target = new URL(location, upstreamUrl);

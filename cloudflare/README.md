@@ -26,7 +26,9 @@ The Worker checks the path boundary itself. Only `/coaching` and `/coaching/` de
 
 The upstream is `https://mike-mo.github.io/coaching/`. The Worker forwards the asset path and query string, plus Accept and conditional/range headers. It does not copy browser cookies, authorization, referrers, client identity or analytics headers. The app has no analytics endpoint or tracking integration.
 
-Upstream status, content, content type and caching headers pass through. HEAD and conditional requests keep their usual behavior. Relative redirects that resolve to the upstream's `/coaching` path, and absolute redirects to that same origin and path, point back to the custom site. Other redirects are preserved. Network failures are logged and return an uncacheable 502; unrelated-origin passthrough errors are left to Cloudflare's normal handling.
+Upstream status, content, content type and caching headers pass through. HTML responses add `Cache-Control: no-transform` while retaining the upstream's existing cache directives. This prevents Cloudflare from injecting its analytics or JavaScript Detections scripts into the study page. See the [Web Analytics FAQ](https://developers.cloudflare.com/web-analytics/faq/) and [JavaScript Detections documentation](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/#if-your-origin-sends-a-no-transform-header). HEAD and conditional requests keep their usual behavior.
+
+Relative redirects that resolve to the upstream's `/coaching` path, and absolute redirects to that same origin and path, point back to the custom site. Other redirects are preserved. Network failures are logged and return an uncacheable 502; unrelated-origin passthrough errors are left to Cloudflare's normal handling.
 
 These Worker files and tests are excluded from the GitHub Pages artifact by its six-runtime-file allowlist. Deploy the Worker separately whenever its source changes.
 

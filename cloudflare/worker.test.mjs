@@ -103,6 +103,25 @@ test("HEAD reaches upstream as HEAD and returns headers without a body", async t
   assert.equal(await response.text(), "");
   assert.equal(response.headers.get("content-length"), "300");
   assert.equal(response.headers.get("etag"), '"homepage"');
+  assert.equal(response.headers.get("cache-control"), "no-transform");
+});
+
+test("HTML opts out of edge script injection without changing existing cache policy", async t => {
+  for (const [original, expected] of [
+    ["public, max-age=600", "public, max-age=600, no-transform"],
+    ["private, no-store", "private, no-store, no-transform"],
+    ["max-age=600, No-Transform", "max-age=600, No-Transform"],
+    [null, "no-transform"]
+  ]) {
+    const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", ETag: '"unchanged"' });
+    if (original !== null) headers.set("cache-control", original);
+    t.mock.method(globalThis, "fetch", async () => new Response("<html>Original study page</html>", { headers }));
+    const response = await worker.fetch(new Request(site + "/coaching/"));
+    assert.equal(response.headers.get("cache-control"), expected);
+    assert.equal(response.headers.get("etag"), '"unchanged"');
+    assert.equal(await response.text(), "<html>Original study page</html>");
+    t.mock.restoreAll();
+  }
 });
 
 test("conditional 304 and missing asset 404 remain unchanged", async t => {
