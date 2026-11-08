@@ -2,7 +2,7 @@
 window.EXAM = (() => {
   const duration = 2 * 60 * 60 * 1000;
   const normalizeTitle = text => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).join(" ");
-  const titleLabel = (competency, text = competency.title) => `C${competency.id} ${text}`;
+  const titleLabel = (competency, text = competency.title) => `C${competency.id}. ${text}`;
   function validAttempt(a) {
     if (a === null || a === undefined) return true;
     if (!a || typeof a !== "object" || !["untimed","timed","elapsed"].includes(a.mode) ||
@@ -147,7 +147,7 @@ window.EXAM = (() => {
       if(element)element.textContent=hasStorageFailure() ? "Not saved. Keep this tab open or save a text copy." : "Saved in this browser.";
     }
     function renderSetup() {
-      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Exam rehearsal</h1><p class="lead">${escape(D.examInstruction)}</p>
+      main.innerHTML=`<p class="eyebrow">Exam practice</p><h1>Exam rehearsal</h1><p class="lead">${escape(D.examInstruction)}</p>
         <section class="card exam-setup"><p>Type the names without their C numbers. The timer counts up while you write, with no time limit. Closing pauses it; returning resumes your saved time.</p>
         <p class="muted">${getPrevious() ? "Your previous completed pass is saved. You can choose to compare it with what you write next." : "After your first completed pass, you can keep it to compare with your next rehearsal."} Your summaries are for self-evaluation, not automatic grading.</p>
         <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
@@ -263,5 +263,5 @@ window.EXAM = (() => {
     });
     return {render,reset:()=>{pendingAction=null;if(dialog.open)dialog.close();}};
   }
-  return {uiVersion:11,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
+  return {uiVersion:12,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
 })();

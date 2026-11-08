@@ -6,6 +6,16 @@ const context={window:{}};
 vm.runInNewContext(readFileSync(new URL("../practice.js",import.meta.url),"utf8"),context);
 vm.runInNewContext(readFileSync(new URL("../content.js",import.meta.url),"utf8"),context);
 const P=context.window.PRACTICE,D=context.window.STUDY;
+test("recall summary uses the actual match and Pass, not assisted review credit alone",()=>{
+  assert.equal(P.recallOutcome(null),null);
+  assert.equal(P.recallOutcome({outcome:"unaided",matched:true,revealed:false}),"unaided");
+  assert.equal(P.recallOutcome({outcome:"assisted",matched:true,revealed:false}),"assisted");
+  assert.equal(P.recallOutcome({outcome:"assisted",matched:false,revealed:false}),"missed");
+  assert.equal(P.recallOutcome({outcome:"assisted",matched:false,revealed:true}),"missed");
+  assert.equal(P.recallOutcome({outcome:"unaided",matched:false}),"missed");
+  assert.equal(P.recallOutcome({outcome:"missed",matched:true}),"missed");
+  assert.equal(P.recallOutcome({outcome:"assisted"}),"missed");
+});
 test("correctness dominates; bonus is capped at four seconds and zero at 64",()=>{
   for(const t of [0,1,4]){assert.equal(P.points("recognition",t),100);assert.equal(P.points("reasonable",t),90);}
   assert.equal(P.points("recognition",34),95);assert.equal(P.points("reasonable",34),85);

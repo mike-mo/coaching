@@ -6,6 +6,12 @@ const context={window:{}};
 vm.runInNewContext(readFileSync(new URL("../exam.js",import.meta.url),"utf8"),context);
 const E=context.window.EXAM;
 const startedAt=1762000000000;
+test("competency labels separate identifiers without changing official names",()=>{
+  const c={id:1,title:"Demonstrates Ethical Practice"};
+  assert.equal(E.titleLabel(c),"C1. Demonstrates Ethical Practice");
+  assert.equal(E.titleLabel(c,"DEMOnstrates Ethical Practice"),"C1. DEMOnstrates Ethical Practice");
+  assert.equal(c.title,"Demonstrates Ethical Practice");
+});
 const attempt=(mode,status="draft")=>({mode,status,startedAt,deadline:mode==="timed"?startedAt+7200000:null,
   finishedAt:status==="draft"?null:startedAt+7200000,answers:Array.from({length:8},(_,i)=>({title:`Saved name ${i+1}`,bullets:["first","second","third"]}))});
 test("legacy timed and untimed drafts retain every answer during elapsed migration",()=>{

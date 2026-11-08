@@ -5,6 +5,7 @@ A small browser-based study app for the eight ICF core competencies. Practice ex
 ## Features
 
 - Name recall with progressive word hints, Pass and separate counts for answers with and without hints.
+- Core competency recall summaries show one outcome per competency: correct without hints (green), used hints (yellow), or wrong/passed (red). Unseen competencies stay neutral; unfinished attempts are labeled unfinished. Question and mixed summary counts and existing review credit are unchanged.
 - 32 original fictional coaching scenarios, four per primary competency, each with four plausible responses and a contextual explanation beside each option.
 - Single-select best-fit practice with separate strongest-option and valid-approach credit. The competency, official definition and citations appear only after answering.
 - A short fictional branching conversation retained in the source and saved data, but hidden from public navigation and entry points while it is developed further.
@@ -16,7 +17,7 @@ A small browser-based study app for the eight ICF core competencies. Practice ex
 - Per-competency closing results based on actual responses. Questions use correctness-first scoring: strongest 90, valid 80, improvement 0, plus up to 10 speed points only for accepted responses. The bonus is capped through 4 seconds and decreases linearly to zero at 64 seconds. Feedback, introductions and time away are excluded. Scores are rounded means of answered questions, including zero-point responses; unseen competencies have no score.
 - An optional coffee reminder below closing results from the third distinct visitor-local calendar day onward. It repeats at eligible summaries until Not now, which suppresses it for that local day only. The footer link remains available.
 
-Names are checked for the official words in order, ignoring capitalization, extra spaces and punctuation around words. C1-C8 are display labels; type only the name. Exam explanations are preserved for self-review, not automatically graded.
+Names are checked for the official words in order, ignoring capitalization, extra spaces and punctuation around words. Competency identifiers and names use `C#. <Name>` throughout study and review. C1-C8 are display labels; type only the name. Exam explanations are preserved for self-review, not automatically graded.
 
 Only the names are requested exactly. Definitions are study references. The three existing text fields now ask for one summary sentence each; their stored `bullets` IDs and all earlier answers remain unchanged. The app does not count sentences or grade their meaning automatically.
 

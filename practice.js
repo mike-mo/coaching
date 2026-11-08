@@ -2,6 +2,11 @@
 window.PRACTICE = (() => {
   const coffeeKey = "coachprep-coffee-days-v1";
   const modes = ["recall","questions","mixed","scenario","exam"];
+  function recallOutcome(response) {
+    if (!response) return null;
+    if (response.revealed === true || response.matched !== true || response.outcome === "missed") return "missed";
+    return response.outcome === "unaided" ? "unaided" : "assisted";
+  }
   function points(outcome, seconds) {
     if (!["recognition","reasonable","missed"].includes(outcome) || !Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid practice result");
     if (outcome === "missed") return 0;
@@ -98,5 +103,5 @@ window.PRACTICE = (() => {
     if(p.mode==="scenario" && (p.responses.length!==s.history.length+(s.branchChoice!==null?1:0) || p.completed!==(s.scenarioNode===null)))return false;
     return true;
   }
-  return {points,duration,day,validDay,validCoffee,visit,coffee,validSaved};
+  return {recallOutcome,points,duration,day,validDay,validCoffee,visit,coffee,validSaved};
 })();
