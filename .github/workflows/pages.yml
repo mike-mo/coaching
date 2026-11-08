@@ -31,6 +31,7 @@ jobs:
           cp index.html styles.css theme.js content.js exam.js analytics.js practice.js app.js _site/
           mkdir _site/assets
           cp assets/share-card.png _site/assets/
+          cp assets/coachprep-logo.svg _site/assets/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

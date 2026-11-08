@@ -62,7 +62,7 @@ test("exam instructions distinguish exact names from three-sentence summaries",(
 });
 test("intro-only close restores prior view without saving or summarizing",()=>{
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
-  const close=app.slice(app.indexOf("function closeStudy()"),app.indexOf("function renderSummary("));
+  const close=app.slice(app.indexOf("function closeStudy("),app.indexOf("function renderSummary("));
   const initial=close.slice(close.indexOf("if(!modalStarted"),close.indexOf("if(flow)"));
   assert.match(initial,/replaceChildren\(previous\.nodes\)/);
   assert.match(initial,/focus\(\{preventScroll:true\}\)/);

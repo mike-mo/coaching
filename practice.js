@@ -43,6 +43,10 @@ window.PRACTICE = (() => {
   function improves(current,previous) {
     return !!current && !!previous && current.scheme===previous.scheme && current.score+1e-12>=previous.score;
   }
+  function validCompletedModes(value){
+    return value && typeof value==="object" && !Array.isArray(value) &&
+      Object.entries(value).every(([mode,done])=>modes.includes(mode) && done===true);
+  }
   function duration(ms) {
     const seconds=Math.max(0,Math.floor(ms/1000));
     return `${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;
@@ -110,6 +114,13 @@ window.PRACTICE = (() => {
     const s=p.snapshot;
     const validItem=i=>i && (i.type==="recall"?data.competencies.some(c=>i.id==="r"+c.id && i.c===c.id):
       i.type==="questions"&&data.questions.some(q=>q.id===i.id && q.c===i.c));
+    const validAnswer=(a,item)=>a && validItem(a.item) && a.item.id===item?.id &&
+      typeof a.attempt==="string" && a.attempt.length<=10000 && Number.isInteger(a.hints) && a.hints>=0 && a.hints<=10 &&
+      typeof a.done==="boolean" && typeof a.revealed==="boolean" && typeof a.assistLogged==="boolean" &&
+      (!a.done || a.reported===true) &&
+      (a.item.type!=="questions" || Array.isArray(a.optionOrder) && a.optionOrder.length===4 &&
+        new Set(a.optionOrder).size===4 && a.optionOrder.every(i=>Number.isInteger(i) && i>=0 && i<4) &&
+        (!a.done || a.selected!==null) && (a.selected===null || Number.isInteger(a.selected) && a.selected>=0 && a.selected<4));
     if(s.view!==(p.mode==="mixed"?"recall":p.mode) || !Array.isArray(s.history) || s.history.length>8 ||
       !s.history.every(h=>h && Number.isInteger(h.index) && Object.hasOwn(data.scenario.nodes,h.node) && data.scenario.nodes[h.node]?.choices?.[h.index]) ||
       s.scenarioNode!==null && !Object.hasOwn(data.scenario.nodes,s.scenarioNode) ||
@@ -124,21 +135,18 @@ window.PRACTICE = (() => {
         s.session.roundEnd-s.session.roundStart<1 || s.session.roundEnd-s.session.roundStart>8)) ||
       !Array.isArray(s.session.results) || s.session.results.length!==s.session.index ||
       !s.session.results.every(r=>r && ["recall","questions"].includes(r.type) && ["unaided","assisted","recognition","reasonable","missed"].includes(r.outcome) && typeof r.missed==="boolean")))return false;
-    if(s.active){
-      const a=s.active;
-      if(!validItem(a.item) || a.item.id!==s.session?.items[s.session.index]?.id ||
-        typeof a.attempt!=="string" || a.attempt.length>10000 ||
-        !Number.isInteger(a.hints) || a.hints<0 || a.hints>10 || typeof a.done!=="boolean" ||
-        typeof a.revealed!=="boolean" || typeof a.assistLogged!=="boolean" ||
-        a.done && a.reported!==true ||
-        a.item.type==="questions" && (!Array.isArray(a.optionOrder) || a.optionOrder.length!==4 ||
-          new Set(a.optionOrder).size!==4 || a.optionOrder.some(i=>!Number.isInteger(i)||i<0||i>3) ||
-          a.done && a.selected===null || a.selected!==null && (!Number.isInteger(a.selected)||a.selected<0||a.selected>3)))return false;
-    }
+    if(s.active && !validAnswer(s.active,s.session?.items[s.session.index]))return false;
+    const answers=s.session?.answers;
+    if(answers!==undefined && (!answers || typeof answers!=="object" || Array.isArray(answers) ||
+      Object.entries(answers).some(([key,a])=>String(Number(key))!==key || !Number.isInteger(Number(key)) ||
+        Number(key)<0 || Number(key)>s.session.index || !a || !a.done || !validAnswer(a,s.session.items[Number(key)]))))return false;
+    if(s.reviewIndex!==undefined && s.reviewIndex!==null && (!s.session || !Number.isInteger(s.reviewIndex) ||
+      s.reviewIndex<(s.session.roundStart || 0) || !Object.hasOwn(answers || {},s.reviewIndex)))return false;
+    if(p.examReview!==undefined && (p.mode!=="exam" || typeof p.examReview!=="boolean"))return false;
     if(s.session && p.responses.length!==s.session.index+(s.active?.done?1:0))return false;
     if(s.session && s.session.index===s.session.items.length && !p.completed)return false;
     if(p.mode==="scenario" && (p.responses.length!==s.history.length+(s.branchChoice!==null?1:0) || p.completed!==(s.scenarioNode===null)))return false;
     return true;
   }
-  return {uiVersion:3,recallOutcome,points,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,improves,duration,day,validDay,validCoffee,visit,coffee,validSaved};
+  return {uiVersion:4,recallOutcome,points,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,coffee,validSaved};
 })();

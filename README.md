@@ -8,6 +8,7 @@ A small browser-based study app for the eight ICF core competencies. Practice ex
 - Core competency recall summaries show one outcome per competency: correct without hints (green), used hints (yellow), or wrong/passed (red). Unseen competencies stay neutral; unfinished attempts are labeled unfinished. Question and mixed summary counts and existing review credit are unchanged.
 - 32 original fictional coaching scenarios, four per primary competency, each with four plausible responses and a contextual explanation beside each option.
 - Single-select best-fit practice with separate strongest-option and valid-approach credit. The competency, official definition and citations appear only after answering.
+- Answer explanations focus on the coach's choices, the client's situation and possible effects. Scoring stays in the introduction and results, not in the reasoning beside an answer.
 - A short fictional branching conversation retained in the source and saved data, but hidden from public navigation and entry points while it is developed further.
 - Eight-item mixed practice across all competencies.
 - Exam rehearsal with eight ordered name fields and a three-sentence summary in the user's own words for each competency. An elapsed count-up timer with no time limit, saved drafts, optional comparison with the previous completed pass and a text-copy download.
@@ -16,7 +17,8 @@ A small browser-based study app for the eight ICF core competencies. Practice ex
 - Full-screen study dialogs in every mode, saved places, stable actions, keyboard controls, visible focus, screen-reader messages and reduced-motion support. Closing an initial introduction without starting returns to the prior view with launch focus restored, without a new session summary or mode event.
 - Exercise introductions retain the Coachprep brand in the header and use the exercise heading as the dialog label. After starting, the header shows the exercise name. Home uses its practice cards instead of a duplicate navigation menu; navigation remains available on session summaries.
 - Recall, Questions and mixed rounds contain at most eight items and end after the last feedback advance. Older longer saved sessions continue in eight-item segments; their answered history and queued items remain saved. Completed rounds offer Start a new round and Practice a different mode. Partial exits keep Resume.
-- A brief local confetti effect plays once when a completed round matches or improves on the previous comparable round in that mode. It has no network dependency and respects reduced motion. Comparisons use unaided accuracy for recall, question points divided by the current 104-point maximum, and the mean of these per-item values for mixed rounds. Exam comparisons use only exact ordered name matches, never free-form summaries. Transitional rounds containing older question scoring are not compared. Only the previous mode aggregate is stored locally; no performance data enters analytics.
+- Submitted answers can be revisited within a round without changing them or earning credit again. Previous-answer review pauses both practice clocks and preserves the current draft. Exam previous-pass comparisons also pause writing time.
+- A brief local confetti effect plays once on the first completed round in a mode, then when a round matches or improves on the previous comparable result. It has no network dependency and respects reduced motion. Comparisons use unaided accuracy for recall, question points divided by the current 104-point maximum, and the mean of these per-item values for mixed rounds. Exam comparisons use only exact ordered name matches, never free-form summaries. Transitional rounds containing older question scoring are not compared. Minimal completion flags and the previous mode aggregate stay locally; no performance data enters analytics.
 - Per-competency closing results based on actual responses. Questions start at strongest 90, valid 80, improvement 0, plus up to 14 speed points only for accepted responses: `14 * clamp((60 - answerSeconds) / 56, 0, 1)`. The bonus is capped through 4 seconds and decreases linearly to zero at 60 seconds. Feedback, introductions and time away are excluded. Scores are rounded means of earned question scores, including zero-point responses; unseen competencies have no score. New strongest scores can reach 104 and valid scores 94; these are practice points, not percentages.
 - Earned question scores are saved with each response. Existing responses without a saved score retain the previous 10-point/64-second bonus when loaded; newly answered questions use the new formula, including in resumed and mixed sessions. No historical response is rescored under the new formula.
 - An optional coffee reminder below closing results from the third distinct visitor-local calendar day onward. It repeats at eligible summaries until Not now, which suppresses it for that local day only. The footer link remains available.
@@ -35,15 +37,19 @@ There are no packages, build tools, accounts or backend services to install. Wit
 python -m http.server 8847 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8847/`. You can also open `index.html` directly, although a stable local server address is more reliable for browser storage.
+Open `http://127.0.0.1:8847/`. Use the local server so SVG masks and browser storage work consistently.
 
 ## GitHub Pages
 
-The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the eight runtime files and sharing image into a static artifact and deploys that artifact using GitHub's Pages actions.
+The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the eight runtime files, sharing image and selected logo SVG into a static artifact and deploys that artifact using GitHub's Pages actions.
 
 Enable GitHub Pages with **GitHub Actions** as the source in the repository's Settings > Pages. The deployment environment records the published URL.
 
 All app assets use relative URLs. The app works at a GitHub project-site subpath and does not require server-side routing. Navigation stays within the page.
+
+## Site logo
+
+The header, exercise introductions and home orbit use `assets/coachprep-logo.svg`, the selected compact diagonal Twin C mark. A CSS mask applies the existing theme color while preserving the SVG's geometry and aspect ratio. The wordmark, favicon and sharing image stay separate.
 
 ## Sharing image
 

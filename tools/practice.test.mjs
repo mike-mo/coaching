@@ -101,3 +101,31 @@ test("saved sessions preserve exact item identity and reject corrupt metadata",(
   assert.equal(P.validSaved(scored,D),true);
   for(const score of [-1,105,NaN,"104"])assert.equal(P.validSaved({...scored,responses:[{...scored.responses[0],score}]},D),false);
 });
+test("saved answer review validates locked history without requiring legacy caches",()=>{
+  const items=D.questions.slice(0,2).map(q=>({id:q.id,type:"questions",c:q.c}));
+  const answer={item:items[0],attempt:"",hints:0,revealed:false,done:true,reported:true,
+    outcome:"recognition",selected:0,assistLogged:false,optionOrder:[0,1,2,3]};
+  const response={c:items[0].c,type:"questions",outcome:"recognition",seconds:4,score:104,scoreVersion:2};
+  const p={version:1,mode:"questions",completed:false,elapsedMs:4000,answerMs:2000,responses:[response],
+    snapshot:{view:"questions",scenarioNode:D.scenario.start,history:[],branchChoice:null,reviewIndex:0,
+      session:{type:"questions",items,index:1,results:[{type:"questions",outcome:"recognition",missed:false}],
+        roundStart:0,roundEnd:2,answers:{0:answer}},
+      active:{...answer,item:items[1],done:false,reported:false,selected:null,outcome:null}}};
+  assert.equal(P.validSaved(p,D),true);
+  const invalid=fn=>{const copy=JSON.parse(JSON.stringify(p));fn(copy);assert.equal(P.validSaved(copy,D),false);};
+  invalid(p=>p.snapshot.session.answers=null);
+  invalid(p=>p.snapshot.session.answers[0].item=items[1]);
+  invalid(p=>p.snapshot.session.answers[0].done=false);
+  invalid(p=>p.snapshot.session.answers[0].selected=null);
+  invalid(p=>p.snapshot.session.answers[0].optionOrder=[0,0,1,2]);
+  invalid(p=>p.snapshot.reviewIndex=1);
+  invalid(p=>p.examReview=true);
+  const legacy=JSON.parse(JSON.stringify(p));
+  delete legacy.snapshot.session.answers;delete legacy.snapshot.reviewIndex;
+  assert.equal(P.validSaved(legacy,D),true);
+});
+test("first-completion flags stay minimal and separate from comparable scores",()=>{
+  assert.equal(P.validCompletedModes({}),true);
+  assert.equal(P.validCompletedModes({recall:true,questions:true,mixed:true,exam:true}),true);
+  for(const value of [null,[],{questions:false},{other:true},{exam:1}])assert.ok(!P.validCompletedModes(value));
+});

@@ -79,6 +79,10 @@ select,input,textarea{background:var(--white);border-color:var(--control-line)}
 dialog::backdrop{background:var(--backdrop)}
 .orbit{width:210px;height:210px;border-color:var(--orbit-line);background:radial-gradient(circle,var(--orbit-center),transparent 70%)}
 .orbit span{border-color:var(--orbit-line);transform:translate(-50%,-50%)}
+.coachprep-logo{display:block;flex-shrink:0;aspect-ratio:1;border-radius:0;color:var(--green);background:currentColor;-webkit-mask:url("assets/coachprep-logo.svg") center / contain no-repeat;mask:url("assets/coachprep-logo.svg") center / contain no-repeat}
+.orbit strong.coachprep-logo{width:100px;height:100px}
+@media(max-width:850px){.orbit strong.coachprep-logo{width:84px;height:84px}}
+@media(max-width:540px){.orbit strong.coachprep-logo{width:76px;height:76px}}
 .masthead{flex-wrap:wrap}
 .header-actions{display:flex;gap:6px;align-items:center;margin-left:auto}
 .theme-toggle{display:grid;place-items:center;padding:10px;min-width:48px;width:48px;height:48px}

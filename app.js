@@ -15,12 +15,13 @@
     const message=document.createElement("p");message.id="coffee-warning";message.className="warning";message.setAttribute("role","alert");message.hidden=true;document.querySelector("main").before(message);
   }
   const D = window.STUDY;
+  const P=window.PRACTICE;
   const KEY = "icf-practice-room-v1";
   const main = document.querySelector("main");
   const warning = document.querySelector("#storage-warning");
   const usage = window.USAGE;
   if (!usage) console.warn("Study usage module is unavailable. Studying is unaffected.");
-  const empty = () => ({version:1, items:{}, scenarios:0, exam:null, examPrevious:null, hintedSuccessIndex:0, practices:{},previousRounds:{}});
+  const empty = () => ({version:1, items:{}, scenarios:0, exam:null, examPrevious:null, hintedSuccessIndex:0, practices:{},previousRounds:{},completedModes:{}});
   const hintedSuccessMessages = ["You got it!", "That's it!", "Nice work!"];
   const hintedSuccessSupport = "Hints help you learn. Keep practicing until you can remember it without them.";
   const legacyQuestionIds = Array.from({length:8},(_,i)=>`q${i+1}`);
@@ -31,7 +32,6 @@
   let view = "home", session = null, active = null;
   let scenarioNode = D.scenario.start, history = [], branchChoice = null;
   let saveFailed = false;
-  const P=window.PRACTICE;
   const homeAnchor=document.createComment("practice-home");
   main.before(homeAnchor);
   const dialog=document.createElement("dialog");
@@ -39,6 +39,8 @@
   dialog.setAttribute("aria-labelledby","study-mode");
   dialog.innerHTML='<header class="study-head"><strong id="study-mode"></strong><span id="study-position"></span><div class="study-head-actions"></div><button id="close-study" class="study-close" aria-label="Close study and show session results">×</button></header><div id="study-errors"></div><div id="study-body"></div><footer id="study-dock"></footer>';
   document.body.append(dialog);
+  const brandMark=document.querySelector("#brand .brand-mark");
+  brandMark.classList.add("coachprep-logo");brandMark.textContent="";
   const introBrand=document.querySelector("#brand").cloneNode(true);
   introBrand.id="study-brand";
   introBrand.onclick=e=>{e.preventDefault();closeStudy();};
@@ -48,7 +50,7 @@
   });
   const theme=document.querySelector("#theme-toggle"),themeAnchor=document.createComment("theme-home");
   theme.before(themeAnchor);
-  let flow=null,clockStarted=null,answerStarted=null,launchFocus=null,introMode=null,returnView=null,modalStarted=false;
+  let flow=null,clockStarted=null,answerStarted=null,launchFocus=null,introMode=null,returnView=null,modalStarted=false,reviewIndex=null;
   const modeNames={recall:"Core competency recall",questions:"Questions",mixed:"Mixed practice",scenario:"Conversation",exam:"Exam rehearsal"};
   const usageMode=mode=>({recall:"titles",scenario:"conversation"}[mode] || mode);
   const coffeeWarning=document.querySelector("#coffee-warning");
@@ -58,8 +60,9 @@
   coffee.visit();
   function elapsed(){return (flow?.elapsedMs || 0)+(clockStarted===null?0:performance.now()-clockStarted);}
   function answerTime(){return (flow?.answerMs || 0)+(answerStarted===null?0:performance.now()-answerStarted);}
+  function isReview(){return reviewIndex!==null || flow?.examReview===true;}
   function snapshot(){
-    return {view,session,active,scenarioNode,history:history.map(h=>({node:h.node,index:D.scenario.nodes[h.node].choices.indexOf(h.choice)})),branchChoice};
+    return {view,session,active,reviewIndex,scenarioNode,history:history.map(h=>({node:h.node,index:D.scenario.nodes[h.node].choices.indexOf(h.choice)})),branchChoice};
   }
   function stash(){
     if(!flow || !dialog.open)return;
@@ -76,7 +79,7 @@
     if(dialog.open)return;
     document.querySelectorAll(".round-confetti").forEach(layer=>layer.remove());
     launchFocus=document.activeElement;
-    returnView={view,session,active,flow,scenarioNode,history,branchChoice,introMode,examAtOpen:state.exam,scrollY:window.scrollY,nodes:document.createDocumentFragment()};
+    returnView={view,session,active,flow,reviewIndex,scenarioNode,history,branchChoice,introMode,examAtOpen:state.exam,scrollY:window.scrollY,nodes:document.createDocumentFragment()};
     returnView.nodes.append(...main.childNodes);
     modalStarted=false;
     document.querySelector("#study-body").append(main);
@@ -87,7 +90,9 @@
   function beginFlow(mode,saved=null,resumeUsage=true){
     modalStarted=true;
     flow=saved?JSON.parse(JSON.stringify(saved)):{version:1,mode,elapsedMs:0,answerMs:0,responses:[],completed:false,snapshot:null};
-    clockStarted=performance.now();answerStarted=null;introMode=null;
+    reviewIndex=saved?.snapshot?.reviewIndex ?? null;
+    if(mode==="exam")flow.examReview=flow.examReview===true && state.exam?.status==="draft" && !!state.examPrevious;
+    clockStarted=flow.completed || isReview()?null:performance.now();answerStarted=null;introMode=null;
     if(mode==="exam" && state.exam){
       if(!saved)flow.elapsedMs=state.exam.elapsedMs;
       if(state.exam.status!=="draft"){flow.elapsedMs=state.exam.elapsedMs;flow.completionRecorded=true;clockStarted=null;}
@@ -112,12 +117,14 @@
     if(!active || active.reported)return;
     active.reported=true;
     noteResponse(active.item,active.outcome,{matched:active.matched===true,revealed:active.revealed===true});
+    if(session){session.answers ||= {};session.answers[session.index]=JSON.parse(JSON.stringify(active));}
   }
   function startMode(mode){
     const previous=state.practices[mode],queued=previous?.snapshot?.session;
     if(previous?.completed && queued && queued.index+(previous.snapshot.active?.done?1:0)<queued.items.length){
       beginFlow(mode,previous,false);
       flow.completed=false;flow.completionRecorded=false;flow.elapsedMs=0;flow.answerMs=0;
+      reviewIndex=null;clockStarted=performance.now();
       session.roundStart=session.index;session.roundEnd=Math.min(session.index+8,session.items.length);
       usage?.begin(usageMode(mode));render();focus(".scenario-prompt,.recall-prompt");return;
     }
@@ -132,7 +139,7 @@
     openShell();
     const saved=state.practices[mode];
     if(saved && !saved.completed && (mode!=="exam" || state.exam)){beginFlow(mode,saved);render();focus(".scenario-prompt,.recall-prompt,h1,.answer-card.selected summary");return;}
-    flow=null;clockStarted=null;answerStarted=null;introMode=mode;view=mode;active=null;session=null;
+    flow=null;clockStarted=null;answerStarted=null;reviewIndex=null;introMode=mode;view=mode;active=null;session=null;
     if(mode==="exam"){
       if(state.exam){beginFlow("exam",saved || null);view="exam";flow.completed=state.exam.status!=="draft";}
       exam.render();focus();return;
@@ -156,13 +163,14 @@
     const current=P.roundMetric(flow,matches),previous=state.previousRounds[flow.mode];
     const changed={...state.previousRounds};
     if(current)changed[flow.mode]=current;else delete changed[flow.mode];
-    const old=state.previousRounds;
+    const old=state.previousRounds,oldModes=state.completedModes,first=!oldModes[flow.mode];
+    state.completedModes={...oldModes,[flow.mode]:true};
     state.previousRounds=changed;flow.completionRecorded=true;stash();
-    return {old,celebrate:P.improves(current,previous)};
+    return {old,oldModes,celebrate:first || P.improves(current,previous)};
   }
   function confetti(){
-    const label=flow?.mode==="exam"?"Your name recall":"Your round";
-    announce(`${label} matched or improved on last time.`);
+    const label=flow?.mode==="exam"?"Your competency recall":"Your round";
+    announce(`Well done finishing ${label.toLowerCase()}.`);
     if(matchMedia("(prefers-reduced-motion: reduce)").matches)return;
     const layer=document.createElement("div");layer.className="round-confetti";layer.setAttribute("aria-hidden","true");
     for(let i=0;i<24;i++){
@@ -172,11 +180,11 @@
     }
     (dialog.open?dialog:document.body).append(layer);setTimeout(()=>layer.remove(),2200);
   }
-  function closeStudy(){
+  function closeStudy(options){
     if(!modalStarted && returnView){
       const previous=returnView;returnView=null;
       closeShell();main.replaceChildren(previous.nodes);
-      ({view,session,active,flow,scenarioNode,history,branchChoice,introMode}=previous);
+      ({view,session,active,flow,reviewIndex,scenarioNode,history,branchChoice,introMode}=previous);
       if(view==="home" && !main.querySelector(".session-summary") && previous.examAtOpen!==state.exam)renderHome();
       clockStarted=null;answerStarted=null;updateNavigation();
       (launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus({preventScroll:true});
@@ -186,12 +194,16 @@
     if(flow){pause();stash();}
     const completion=recordCompletion();
     if(!save()){
-      if(completion){state.previousRounds=completion.old;flow.completionRecorded=false;stash();}
-      if(flow){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}return;
+      if(completion){state.previousRounds=completion.old;state.completedModes=completion.oldModes;flow.completionRecorded=false;stash();}
+      if(flow && !isReview() && !flow.completed){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}return;
     }
     const result=flow || {mode:introMode || view,elapsedMs:0,responses:[],completed:false};
     closeShell();returnView=null;
-    view="home";updateNavigation();renderSummary(result);
+    reviewIndex=null;
+    view="home";updateNavigation();
+    if(options?.home===true || result.mode==="exam" && result.completed){
+      renderHome();(launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus();
+    }else renderSummary(result);
     if(completion){usage?.complete(usageMode(result.mode));if(completion.celebrate)confetti();}
   }
   function renderSummary(result){
@@ -211,11 +223,24 @@
       const recallOutcome=result.mode==="recall"?P.recallOutcome(names[0]) || (pending&&pendingRecall.hints?"assisted":null):null;
       const recallLabels={unaided:"Correct without hints",assisted:"Used hints",missed:"Wrong / passed"};
       const recallIcons={unaided:"✓",assisted:"?",missed:"×"};
-      return `<section class="competency-stat ${practiced?"":"unseen"}${recallOutcome?` recall-${recallOutcome}`:""}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.earnedPoints(r),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Name entered":"Name blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 sentence fields filled${titleMatches?` · ${titleMatches[c.id-1]?"Name matches":"Name needs review"}`:""}</p>`:
+      return `<section class="competency-stat ${practiced?"":"unseen"}${recallOutcome?` recall-${recallOutcome}`:""}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.earnedPoints(r),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Core competency entered":"Core competency blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 sentence fields filled${titleMatches?` · ${titleMatches[c.id-1]?"Named correctly":"Check the competency name"}`:""}</p>`:
       result.mode==="recall"?`${recallOutcome?`<p class="recall-outcome"><span aria-hidden="true">${recallIcons[recallOutcome]}</span> ${recallLabels[recallOutcome]}</p>`:""}${pending?"<p>Unfinished. Resume to continue.</p>":""}`:
       `${qs.length?`<p>${count("recognition")} strongest · ${count("reasonable")} valid · ${count("missed")} to improve</p><p>${qs.length} answered · average answer time ${P.duration(qs.reduce((n,r)=>n+r.seconds,0)/qs.length*1000)}</p>`:""}${names.length?`<p>${names.filter(r=>r.matched&&r.outcome==="unaided").length} correct without hints · ${names.filter(r=>r.outcome==="assisted").length} with hints or Pass · ${names.filter(r=>!r.matched&&!r.revealed).length} need another look</p>`:""}${pending?`<p>Unfinished name attempt${pendingRecall.hints?` · ${pendingRecall.hints} hint${pendingRecall.hints===1?"":"s"} used`:""}. Resume to continue.</p>`:""}${conversation.length?`<p>${conversation.length} fictional conversation choice${conversation.length===1?"":"s"} explored. No automated score.</p>`:""}`}</section>`;
     }).join("")}</div><details class="summary-help" open><summary>About these results</summary><p>These are practice results, not an official ICF assessment. ${q.length?"Question scores use 90 / 80 / 0 base points plus up to 14 accepted-response speed points, capped through 4 seconds and tapering to zero at one minute. The competency score is the rounded mean of earned scores. Earlier saved answers keep their original bonus.":""} Name recall, conversation choices and exam points are not speed-scored. Exam practice time counts up and pauses while you are away.</p></details>${coffee.eligible()?`<aside id="coffee-reminder" class="coffee-card"><h2>Say thanks</h2><p>Enjoying the practice? A coffee would make my day!</p><div class="actions"><a href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action">Buy me a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`:""}<div class="summary-actions actions"><button id="summary-home">${result.completed?"Practice a different mode":"Home"}</button><button class="primary" id="resume-practice">${result.completed?"Start a new round":"Resume "+(modeNames[result.mode] || "practice").toLowerCase()}</button></div></section>`;
+    document.querySelector("#summary-home").textContent="Practice a different mode";
     document.querySelector("#summary-home").onclick=()=>{flow=null;view="home";renderHome();(launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus();};
+    const reviewSession=result.snapshot?.session;
+    const reviewable=Object.keys(reviewSession?.answers || {}).map(Number).filter(i=>i>=(reviewSession.roundStart || 0) && i<=reviewSession.index);
+    if(reviewable.length){
+      const reviewButton=document.createElement("button");reviewButton.id="review-round";reviewButton.textContent="Review your answers";
+      reviewButton.onclick=()=>{
+        const saved=JSON.parse(JSON.stringify(state.practices[result.mode]));
+        saved.snapshot.reviewIndex=Math.max(...reviewable);
+        openShell();beginFlow(result.mode,saved,false);
+        viewAnswer(Math.max(...reviewable));
+      };
+      document.querySelector(".summary-actions").prepend(reviewButton);
+    }
     document.querySelector("#resume-practice").onclick=()=>{
       if(result.completed && ["recall","questions","mixed"].includes(result.mode)){openShell();startMode(result.mode);}
       else {navigate(result.mode || "recall");if(result.completed && result.mode==="exam")document.querySelector("#exam-discard")?.click();}
@@ -235,22 +260,55 @@
     const heading=main.querySelector("h1");
     if(!modalStarted && heading)heading.id="study-intro-title";
     dialog.setAttribute("aria-labelledby",modalStarted?"study-mode":"study-intro-title");
-    document.querySelector("#study-position").textContent=session?`${Math.min(session.index-(session.roundStart || 0)+1,(session.roundEnd || session.items.length)-(session.roundStart || 0))} / ${(session.roundEnd || session.items.length)-(session.roundStart || 0)}`:"";
+    document.querySelector("#study-position").textContent=session?`${reviewIndex!==null?"Review ":""}${Math.min((reviewIndex ?? session.index)-(session.roundStart || 0)+1,(session.roundEnd || session.items.length)-(session.roundStart || 0))} / ${(session.roundEnd || session.items.length)-(session.roundStart || 0)}`:"";
     const dock=document.querySelector("#study-dock");dock.replaceChildren();
     const time=document.createElement("span");time.id="practice-time";time.setAttribute("role","timer");time.setAttribute("aria-live","off");time.setAttribute("aria-label","Elapsed study time");time.textContent=flow?P.duration(elapsed()):"";dock.append(time);
-    const selector=view==="exam"?'#exam-start,button[form="exam-form"],#exam-download,#exam-discard':
+    if(reviewIndex!==null)main.querySelector("#next-item")?.remove();
+    const selector=view==="exam"?'#exam-start,button[form="exam-form"],#exam-download,#exam-discard,#exam-home':
       "#next-item,#continue-scenario,#back-home,#restart-scenario,#recall-form button";
     main.querySelectorAll(selector).forEach(button=>{if(button.type==="submit"&&button.closest("form"))button.setAttribute("form",button.closest("form").id);dock.append(button);});
     if(view==="exam"){
       const deadline=main.querySelector(".exam-clock");if(deadline){time.replaceWith(deadline);}
-      main.querySelectorAll("#exam-home").forEach(b=>b.hidden=true);
+      main.querySelectorAll("#exam-home").forEach(b=>b.hidden=false);
     }
-    if(active && !active.done && flow && answerStarted===null)answerStarted=performance.now();
-    if(view==="scenario" && branchChoice===null && flow && answerStarted===null)answerStarted=performance.now();
-    if(active && !active.done && active.item.type==="questions"){
+    if(active && !active.done && flow && !isReview() && answerStarted===null)answerStarted=performance.now();
+    if(view==="scenario" && branchChoice===null && flow && !isReview() && answerStarted===null)answerStarted=performance.now();
+    if(active && !active.done && active.item.type==="questions" && reviewIndex===null){
       const button=document.createElement("button");button.disabled=true;button.textContent="Choose a response";dock.append(button);
     }
+    if(session){
+      const available=Object.keys(session.answers || {}).map(Number).filter(i=>i>=(session.roundStart || 0) && i<session.index).sort((a,b)=>a-b);
+      const previous=available.filter(i=>i<(reviewIndex ?? session.index)).at(-1);
+      const back=document.createElement("button");back.id="review-previous";back.textContent="Previous answer";back.disabled=previous===undefined;
+      back.onclick=()=>viewAnswer(previous);dock.append(back);
+      main.querySelector(".review-unavailable")?.remove();
+      if(previous===undefined && (reviewIndex ?? session.index)>(session.roundStart || 0)){
+        const note=document.createElement("p");note.className="muted review-unavailable";
+        note.textContent="Earlier answers in this saved round weren't stored for review. New answers will be available.";
+        main.prepend(note);
+      }
+      if(reviewIndex!==null){
+        const next=available.find(i=>i>reviewIndex);
+        if(next!==undefined){const forward=document.createElement("button");forward.id="review-next";forward.textContent="Next answer";forward.onclick=()=>viewAnswer(next);dock.append(forward);}
+        const resume=document.createElement("button");resume.id="review-return";resume.className="primary";resume.textContent=flow.completed?"Back to results":"Return to current item";resume.onclick=resumeCurrent;dock.append(resume);
+      }
+    }
     stash();
+  }
+  function viewAnswer(index){
+    if(!session?.answers?.[index]){announce("This earlier answer was not saved for review.");return;}
+    pause();reviewIndex=index;renderStudy();document.querySelector("#study-body").scrollTop=0;
+    focus(".answer-card.selected summary,#study-card h3");
+    announce("Reviewing a submitted answer. Your timers are paused.");
+  }
+  function resumeCurrent(){
+    if(flow.completed){closeStudy();return;}
+    reviewIndex=null;clockStarted=performance.now();answerStarted=active && !active.done?performance.now():null;
+    renderStudy();focus("#recall-input,.scenario-prompt,#study-card h3");persist();
+  }
+  function examReview(open){
+    if(flow?.mode!=="exam" || state.exam?.status!=="draft" || open===!!flow.examReview)return;
+    pause();flow.examReview=open;if(!open)clockStarted=performance.now();persist();
   }
   document.querySelector("#close-study").onclick=closeStudy;
   function viewportSize(){
@@ -322,6 +380,11 @@
       s.exam=window.EXAM.migrate(s.exam,s.practices.exam?.elapsedMs);
       if(s.previousRounds!==undefined && !window.PRACTICE.validBaselines(s.previousRounds))storageError("Your previous-round comparison could not be opened. Saved study answers are unchanged.");
       s.previousRounds=window.PRACTICE.validBaselines(s.previousRounds)?s.previousRounds:{};
+      if(s.completedModes!==undefined && !P.validCompletedModes(s.completedModes))storageError("Previous completion history could not be opened. Saved answers are unchanged.");
+      s.completedModes=P.validCompletedModes(s.completedModes)?s.completedModes:{};
+      for(const mode of [...Object.keys(s.previousRounds),...Object.entries(s.practices).filter(([,p])=>p.completed).map(([mode])=>mode)]){
+        if(!s.completedModes[mode]){s.completedModes[mode]=true;needsPracticeMigration=true;}
+      }
       for(const [mode,saved] of Object.entries(s.practices)){
         if(saved.completed && !saved.completionRecorded && !s.previousRounds[mode]){
           const metric=window.PRACTICE.roundMetric(saved);
@@ -334,6 +397,7 @@
         const matches=previousExam.answers.map((a,i)=>window.EXAM.compareTitle(a.title,i+1,D.competencies).kind==="match");
         s.previousRounds.exam=window.PRACTICE.roundMetric({mode:"exam"},matches);needsPracticeMigration=true;
       }
+      if(previousExam)s.completedModes.exam=true;
       return s;
     } catch {
       storageError("We couldn't open your saved progress or rehearsal. This tab starts fresh. Your old saved data is unchanged unless you practice or reset. Choose Reset progress to delete it.");
@@ -368,16 +432,17 @@
   }
   const normalizeTitle = window.EXAM.normalizeTitle;
   const titleLabel = window.EXAM.titleLabel;
-  const exam = window.EXAM.create({get:()=>state.exam,set:a=>{state.exam=a;if(!a){delete state.practices.exam;flow=null;clockStarted=null;answerStarted=null;modalStarted=false;}},save:persist,storageError,
+  const exam = window.EXAM.create({get:()=>state.exam,set:a=>{state.exam=a;if(!a){delete state.practices.exam;flow=null;clockStarted=null;answerStarted=null;reviewIndex=null;modalStarted=false;}},save:persist,storageError,
     getPrevious:()=>state.examPrevious,setPrevious:a=>{state.examPrevious=a;},getElapsed:()=>flow?.mode==="exam"?elapsed():state.exam?.elapsedMs || 0,
-    hasStorageFailure:()=>saveFailed,announce,escape,focus,home:closeStudy,
+    hasStorageFailure:()=>saveFailed,announce,escape,focus,home:()=>closeStudy({home:true}),
+    onReviewChange:examReview,isReviewing:()=>flow?.examReview===true,
     isVisible:()=>view==="exam",onStarted:()=>usage?.begin("exam"),
     onCompleted:()=>{
       if(flow?.mode==="exam"){
         pause();flow.elapsedMs=state.exam.elapsedMs;flow.completed=true;
         const completion=recordCompletion();
         if(completion && persist()){usage?.complete("exam");if(completion.celebrate)confetti();}
-        else if(completion){state.previousRounds=completion.old;flow.completionRecorded=false;stash();}
+        else if(completion){state.previousRounds=completion.old;state.completedModes=completion.oldModes;flow.completionRecorded=false;stash();}
       }
     },onFinished:()=>{if(view==="home")renderHome();},
     onRender:()=>{if(state.exam && !flow && dialog.open)beginFlow("exam");if(flow?.mode==="exam" && state.exam)flow.completed=state.exam.status!=="draft";updateShell();},citation});
@@ -427,7 +492,7 @@
   }
   function renderHome() {
     const items=practiceItems();
-    main.innerHTML = `<section class="hero"><div><p class="eyebrow">ICF core competencies · 2025</p><h1>The eight ICF<br>core competencies</h1><p class="lead">Practice the names from memory, explore coaching choices in questions or try a written exam rehearsal.</p></div><div class="orbit" aria-hidden="true"><strong>8</strong>${Array.from({length:8},(_,i)=>`<span style="left:${50+42*Math.cos((i-1)*Math.PI/4)}%;top:${50+42*Math.sin((i-1)*Math.PI/4)}%">${i+1}</span>`).join("")}</div></section>
+    main.innerHTML = `<section class="hero"><div><p class="eyebrow">ICF core competencies · 2025</p><h1>The eight ICF<br>core competencies</h1><p class="lead">Practice the names from memory, explore coaching choices in questions or try a written exam rehearsal.</p></div><div class="orbit" aria-hidden="true"><strong class="coachprep-logo"></strong>${Array.from({length:8},(_,i)=>`<span style="left:${50+42*Math.cos((i-1)*Math.PI/4)}%;top:${50+42*Math.sin((i-1)*Math.PI/4)}%">${i+1}</span>`).join("")}</div></section>
       <section class="practice-setup" aria-labelledby="practice-setup-title"><h2 id="practice-setup-title">Choose your practice</h2>
       <section class="grid practice-grid" aria-label="Name and question practice">
       <article class="experience"><span class="number">01 / CORE COMPETENCIES</span><h3>Core competency recall</h3><p>Try to name each from memory, use a hint to show one word at a time, or choose Pass to see the full name.</p><button data-start="recall">Practice Core Competencies</button></article>
@@ -480,19 +545,20 @@
     optionOrder:item.type==="questions"?shuffle(D.questions.find(q=>q.id===item.id).options.map((_,i)=>i)):null}; }
   function renderStudy() {
     announce("");
-    if (session && session.index>=(session.roundEnd || session.items.length) && session.items.length) return renderComplete();
-    const item=active?.item || currentItem();
+    if (reviewIndex===null && session && session.index>=(session.roundEnd || session.items.length) && session.items.length) return renderComplete();
+    const item=reviewIndex!==null?session.answers[reviewIndex].item:active?.item || currentItem();
     if (!item) {
       main.innerHTML=`<h1>No practice items available.</h1><button id="back-home">Back to home</button>`;
       document.querySelector("#back-home").onclick=()=>navigate("home"); return;
     }
-    if (!active) active=makeActive(item);
+    if (reviewIndex===null && !active) active=makeActive(item);
     const recall=item.type==="recall";
     main.innerHTML='<section id="study-card"></section>';
     if(recall) renderRecall(); else renderQuestion();
+    if(reviewIndex!==null)document.querySelector("#study-card").insertAdjacentHTML("afterbegin",'<p class="muted">Previous answer · timers paused.</p>');
   }
   function renderRecall() {
-    const a=active, c=comp(a.item.c);
+    const a=reviewIndex!==null?session.answers[reviewIndex]:active, c=comp(a.item.c);
     const feedbackHeading=a.revealed?"Official name":a.matched?(a.successMessage || "Correct!"):"The wording doesn't match.";
     const reviewMinutes=Math.max(0,Math.ceil(((state.items[a.item.id]?.due || 0)-Date.now())/60000));
     const nextReview=reviewMinutes===0?"ready now":reviewMinutes<60?`in ${reviewMinutes} minute${reviewMinutes===1?"":"s"}`:
@@ -549,7 +615,7 @@
   }
   function hintFor(title,n) {return title.split(" ").map((w,i)=>i<n?w:"blank").join(" ");}
   function renderQuestion() {
-    const a=active, q=D.questions.find(q=>q.id===a.item.id);
+    const a=reviewIndex!==null?session.answers[reviewIndex]:active, q=D.questions.find(q=>q.id===a.item.id);
     const c=comp(q.c);
     const creditLabels={strongest:"Strongest option",reasonable:"Valid approach",less:"Opportunity to improve"};
     const order=a.done?[a.selected,...a.optionOrder.filter(i=>i!==a.selected)]:a.optionOrder;
@@ -576,7 +642,8 @@
     updateShell();persist();
   }
   function nextItem() {
-    if(!active?.done)return;
+    if(reviewIndex!==null || !active?.done)return;
+    if(session){session.answers ||= {};session.answers[session.index]=JSON.parse(JSON.stringify(active));}
     if(session) {session.results.push({type:active.item.type,outcome:active.outcome,missed:active.outcome==="missed" || (!active.revealed && active.matched===false)});session.index++;}
     else {
       const items=practiceItems(view);
@@ -605,7 +672,7 @@
       ${branchChoice!==null?`<details class="review-question"><summary>Conversation context: ${escape(s.title)}</summary><p>${escape(s.intro)}</p><p class="client"><strong>Client:</strong> "${escape(node.client)}"</p><p>What would you say next?</p></details>
       <details class="answer-card selected neutral" open><summary><span class="option-content"><span class="chosen-marker">Your choice</span><span class="option-text">${escape(node.choices[branchChoice].text)}</span></span></summary><div class="rationale-panel branch-note"><hr><p><strong>Possible client response:</strong> "${escape(node.choices[branchChoice].reaction)}"</p><p>${escape(node.choices[branchChoice].reason)}</p></div></details>
       <details class="competency-reference"><summary>What competency is at play?</summary><h3>${titleLabel(comp(node.c))}</h3>${citation(node.c,node.refs)}</details><button class="primary" id="continue-scenario">${node.choices[branchChoice].next===null?"Review your choices":"Continue"}</button>`:
-      `<p class="client"><strong>Client:</strong> "${escape(node.client)}"</p><h2 style="font-size:1.25rem">What would you say next?</h2><div class="options">${node.choices.map((ch,i)=>`<button class="option" data-branch="${i}"><span class="letter">${"ABC"[i]}</span><span>${escape(ch.text)}</span></button>`).join("")}</div><details class="practice-help" open><summary>Practice help</summary><p>${escape(s.intro)}</p><p>There is no score. Ask yourself what you are assuming and how you would respond if the client disagreed.</p></details>`}</section>`;
+      `<p class="client"><strong>Client:</strong> "${escape(node.client)}"</p><h2 style="font-size:1.25rem">What would you say next?</h2><div class="options">${node.choices.map((ch,i)=>`<button class="option" data-branch="${i}"><span class="letter">${"ABC"[i]}</span><span>${escape(ch.text)}</span></button>`).join("")}</div><details class="practice-help" open><summary>Practice help</summary><p>${escape(s.intro)}</p><p>Ask yourself what you are assuming and how you would respond if the client disagreed.</p></details>`}</section>`;
     document.querySelectorAll("[data-branch]").forEach(b=>b.onclick=()=>{if(branchChoice!==null)return;branchChoice=Number(b.dataset.branch);noteResponse({c:node.c,type:"scenario"},"explored");renderScenario();persist();focus(".branch-note");announce("You can read a possible client reply and the reason for this choice.");});
     document.querySelector("#continue-scenario")?.addEventListener("click",()=>{
       if(branchChoice===null || node!==s.nodes[scenarioNode])return;
@@ -632,10 +699,10 @@
   };
   const base=document.currentScript?.src || location.href;
   const assets=[
-    ["practice.js?v=3",window.PRACTICE?.uiVersion===3],
-    ["exam.js?v=12",window.EXAM?.uiVersion===12],
-    ["content.js?v=9",!!window.STUDY?.examInstruction],
-    ["styles.css?v=17",!!document.querySelector('link[href="styles.css?v=17"]')]
+    ["practice.js?v=4",window.PRACTICE?.uiVersion===4],
+    ["exam.js?v=13",window.EXAM?.uiVersion===13],
+    ["content.js?v=11",window.STUDY?.uiVersion===11],
+    ["styles.css?v=18",!!document.querySelector('link[href="styles.css?v=18"]')]
   ].filter(([,ready])=>!ready);
   if(!assets.length)start();
   else Promise.all(assets.map(([source])=>new Promise((resolve,reject)=>{

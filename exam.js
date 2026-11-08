@@ -24,7 +24,7 @@ window.EXAM = (() => {
   function compareTitle(actual, position, competencies) {
     const expected = competencies[position - 1];
     const entered = normalizeTitle(actual);
-    if (!entered) return {kind:"blank", message:actual.trim() ? "There are no words in this answer." : "You left this name blank."};
+    if (!entered) return {kind:"blank", message:actual.trim() ? "There are no words in this answer." : "This competency is blank."};
     if (entered === normalizeTitle(expected.title)) return {kind:"match", message:"Got it!"};
     const elsewhere = competencies.find(c => normalizeTitle(c.title) === entered);
     if (elsewhere) return {kind:"wrong-slot", message:`That's competency ${elsewhere.id}. This space is for competency ${position}.`};
@@ -47,7 +47,7 @@ window.EXAM = (() => {
     ].filter(Boolean).join(" ")};
   }
   function create(options) {
-    const {get,set,getPrevious,setPrevious,getElapsed,save,storageError,hasStorageFailure,announce,escape,focus,home,isVisible,onFinished,onStarted,onCompleted,citation} = options;
+    const {get,set,getPrevious,setPrevious,getElapsed,save,storageError,hasStorageFailure,announce,escape,focus,home,isVisible,onFinished,onStarted,onCompleted,citation,onReviewChange,isReviewing} = options;
     const D = window.STUDY;
     const main = document.querySelector("main");
     const checkIcon = '<svg class="exam-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -64,7 +64,7 @@ window.EXAM = (() => {
     }
     function blanksText(missing) {
       return [
-        missing.titles ? `${missing.titles} name${missing.titles===1?"":"s"}` : "",
+        missing.titles ? `${missing.titles} core competenc${missing.titles===1?"y":"ies"}` : "",
         missing.bullets ? `${missing.bullets} sentence field${missing.bullets===1?"":"s"}` : ""
       ].filter(Boolean).join(" and ");
     }
@@ -98,7 +98,7 @@ window.EXAM = (() => {
       if(isVisible()){render();focus();}
       else onFinished();
       const matches=a.answers.filter((answer,i)=>compareTitle(answer.title,i+1,D.competencies).kind==="match").length;
-      announce(`${matches} of 8 names correct. Review your three-sentence summary for each competency.`);
+      announce(`${matches} of 8 core competencies named correctly. Review your three-sentence summary for each competency.`);
     }
     function discard() {
       const a=get();
@@ -127,7 +127,7 @@ window.EXAM = (() => {
         "",
         ...a.answers.flatMap((answer,i)=>{
           const named=a.status==="draft"?null:D.competencies.find(c=>normalizeTitle(c.title)===normalizeTitle(answer.title));
-          const title=named?titleLabel(named,answer.title):`C${i+1} · Your name: ${answer.title}`;
+          const title=named?titleLabel(named,answer.title):`C${i+1}. Your answer: ${answer.title}`;
           return [`${i+1}. ${title}`,...answer.bullets.map((b,j)=>`  ${j+1}. ${b}`),""];
         })
       ].join("\n");
@@ -148,7 +148,7 @@ window.EXAM = (() => {
     }
     function renderSetup() {
       main.innerHTML=`<p class="eyebrow">Exam practice</p><h1>Exam rehearsal</h1><p class="lead">${escape(D.examInstruction)}</p>
-        <section class="card exam-setup"><p>Type the names without their C numbers. The timer counts up while you write, with no time limit. Closing pauses it; returning resumes your saved time.</p>
+        <section class="card exam-setup"><p>Use the exact competency names, without C numbers. The timer counts up while you write, with no time limit. Reviewing your previous pass or closing practice pauses it.</p>
         <p class="muted">${getPrevious() ? "Your previous completed pass is saved. You can choose to compare it with what you write next." : "After your first completed pass, you can keep it to compare with your next rehearsal."} Your summaries are for self-evaluation, not automatic grading.</p>
         <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
       document.querySelector("#exam-start").onclick=()=>{
@@ -169,10 +169,13 @@ window.EXAM = (() => {
         ${getPrevious()?'<p><a href="#exam-comparison" id="exam-compare-link">Compare with your previous pass</a> when you want to review what has changed.</p>':""}
         <nav class="exam-jumps" aria-label="Go to a numbered competency">${a.answers.map((_,i)=>`<a href="#exam-slot-${i+1}" aria-label="Go to C${i+1}">C${i+1}</a>`).join("")}</nav>
         <form id="exam-form">${a.answers.map((answer,i)=>`<fieldset class="card exam-slot" id="exam-slot-${i+1}"><legend>C${i+1}</legend>
-          <label for="exam-title-${i+1}">Name for C${i+1}</label><input id="exam-title-${i+1}" data-exam-slot="${i}" data-exam-field="title" value="${escape(answer.title)}" autocomplete="off" spellcheck="false">
+          <label for="exam-title-${i+1}">Core competency C${i+1}</label><input id="exam-title-${i+1}" data-exam-slot="${i}" data-exam-field="title" value="${escape(answer.title)}" autocomplete="off" spellcheck="false">
           ${answer.bullets.map((bullet,j)=>`<label for="exam-bullet-${i+1}-${j+1}">Sentence ${j+1}</label><textarea id="exam-bullet-${i+1}-${j+1}" data-exam-slot="${i}" data-exam-field="${j}" rows="3">${escape(bullet)}</textarea>`).join("")}
           </fieldset>`).join("")}</form>${comparison(a)}<div class="actions"><button class="primary" type="submit" form="exam-form">Finish rehearsal</button><button id="exam-download" type="button">Save a text copy</button><button id="exam-discard" type="button">Discard draft</button><button id="exam-home" type="button">Back to home</button></div>`;
       document.querySelectorAll("[data-exam-slot]").forEach(input=>{
+        input.addEventListener("focus",()=>{
+          if(isReviewing?.()){onReviewChange?.(false);const previousPass=document.querySelector("#exam-comparison");if(previousPass)previousPass.open=false;}
+        });
         input.addEventListener("input",()=>{
           const current=get();
           if(current?.status !== "draft")return;
@@ -203,46 +206,49 @@ window.EXAM = (() => {
       document.querySelector("#exam-home").onclick=home;
       document.querySelector("#exam-compare-link")?.addEventListener("click",event=>{
         event.preventDefault();
+        onReviewChange?.(true);
         const comparison=document.querySelector("#exam-comparison");
         comparison.open=true;focus("#exam-comparison summary");comparison.scrollIntoView({block:"start"});
       });
+      const previousPass=document.querySelector("#exam-comparison");
+      previousPass?.querySelector("summary").addEventListener("click",()=>onReviewChange?.(!previousPass.open));
+      previousPass?.addEventListener("toggle",()=>onReviewChange?.(previousPass.open));
       saveLabel();timer();
     }
     function comparisonAnswers(current,previous) {
       return current.answers.map((answer,i)=>`<section class="exam-comparison-slot"><h3>C${i+1}</h3><div class="exam-comparison-grid">${[
         ["Previous pass",previous.answers[i]],["This pass",answer]
-      ].map(([label,value])=>`<div><h4>${label}</h4><p class="definition-label">Name</p><p class="submitted-answer">${escape(value.title) || "(blank)"}</p><p class="definition-label">Your summary</p><ol class="submitted-bullets">${value.bullets.map(b=>`<li class="submitted-answer">${escape(b) || "(blank)"}</li>`).join("")}</ol></div>`).join("")}</div></section>`).join("");
+      ].map(([label,value])=>`<div><h4>${label}</h4><p class="definition-label">Core competency</p><p class="submitted-answer">${escape(value.title) || "(blank)"}</p><p class="definition-label">Your summary</p><ol class="submitted-bullets">${value.bullets.map(b=>`<li class="submitted-answer">${escape(b) || "(blank)"}</li>`).join("")}</ol></div>`).join("")}</div></section>`).join("");
     }
     function comparison(a) {
       const previous=getPrevious();
       if(!previous)return "";
-      return `<details class="exam-comparison" id="exam-comparison"><summary>Compare with your previous pass</summary><p>Previous pass finished ${escape(new Date(previous.finishedAt).toLocaleString())}. Opening this shows your earlier answers. They stay separate from your current draft.</p><p>What is clearer now? Which parts of the competency does each sentence describe? What would you revise? These summaries are for your own evaluation.</p><div class="exam-comparison-content">${comparisonAnswers(a,previous)}</div></details>`;
+      return `<details class="exam-comparison" id="exam-comparison"${isReviewing?.()?" open":""}><summary>Compare with your previous pass</summary><p>Previous pass finished ${escape(new Date(previous.finishedAt).toLocaleString())}. Opening this shows your earlier answers and pauses your writing timer. They stay separate from your current draft.</p><p>What is clearer now? Which parts of the competency does each sentence describe? What would you revise? These summaries are for your own evaluation.</p><div class="exam-comparison-content">${comparisonAnswers(a,previous)}</div></details>`;
     }
     function renderReview(a) {
       const checks=a.answers.map((answer,i)=>compareTitle(answer.title,i+1,D.competencies));
       const matches=checks.filter(c=>c.kind==="match").length;
       const missing=incomplete(a);
-      main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your name results"}</h1>
-        <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Name results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 names correct</p><p class="exam-score-description">Exact names in the right numbered positions.</p></div></section>
-        <p class="lead">Names are checked automatically. Review your three-sentence summary for each competency below.</p>
+      main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your core competency results"}</h1>
+        <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Core competency results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 core competencies named correctly</p><p class="exam-score-description">Exact competency names in the right numbered positions.</p></div></section>
+        <p class="lead">Only the exact competency names and their order are checked automatically. Review your own-word summaries below.</p>
         ${comparison(a)}
         ${missing.titles || missing.bullets ? `<p>${blanksText(missing)} ${missing.titles+missing.bullets===1?"was":"were"} left blank.</p>` : ""}
-        <section class="feedback"><h2>Review your summaries</h2><p>Does each summary capture the competency? Are the three sentences in your own words? Do they describe different parts of it?</p><p>Use the definitions and examples to check your answers. Some competencies also cover a coach's learning and work outside sessions.</p></section>
+        <section class="feedback"><h2>Review your summaries</h2><p>Does each summary capture the competency? Are the three sentences in your own words? Do they describe different parts of it?</p><p>Use the official definitions and references to review your answers. Some competencies also cover a coach's learning and work outside sessions.</p></section>
         <p class="muted">Capital letters, extra spaces and punctuation around words don't affect the name check.</p>
         <div id="exam-save" class="muted"></div><span class="exam-clock"><strong id="exam-time" role="timer" aria-live="off"></strong></span>
         ${a.answers.map((answer,i)=>{
           const c=D.competencies[i], check=checks[i];
           const named=D.competencies.find(c=>normalizeTitle(c.title)===normalizeTitle(answer.title));
           const submittedTitle=named?titleLabel(named,answer.title):answer.title;
-          return `<section class="card exam-review-slot"><div class="card-head"><span>C${i+1}</span>${check.kind==="match"?"":`<span class="pill">${check.kind==="wrong-slot"?"Right name, wrong place":check.kind==="blank"?"Left blank":"Check the wording"}</span>`}</div>
-            <p class="definition-label">Official name</p><h2>${escape(titleLabel(c))}</h2><p><strong>Your name:</strong> <span class="submitted-answer">${escape(submittedTitle) || "(blank)"}</span></p>
+          return `<section class="card exam-review-slot"><div class="card-head"><span>C${i+1}</span>${check.kind==="match"?"":`<span class="pill">${check.kind==="wrong-slot"?"Right competency, wrong place":check.kind==="blank"?"Left blank":"Check the wording"}</span>`}</div>
+            <p class="definition-label">Core competency</p><h2>${escape(titleLabel(c))}</h2><p><strong>Your answer:</strong> <span class="submitted-answer">${escape(submittedTitle) || "(blank)"}</span></p>
             <p class="exam-title-check ${check.kind==="match"?"got-it":""}">${check.kind==="match"?`${checkIcon}<strong>${escape(check.message)}</strong>`:escape(check.message)}</p><p class="definition-label">Official definition</p><blockquote class="competency-definition">"${escape(c.definition)}"</blockquote>
             <h3>Your summary</h3><ol class="submitted-bullets">${answer.bullets.map(b=>`<li class="submitted-answer">${b.trim()?escape(b):"<span class='muted'>Left blank</span>"}</li>`).join("")}</ol>
-            <details open><summary>Examples of what a coach might do</summary><ul class="exam-examples">${D.examExamples[c.id].map(e=>`<li>${escape(e.text)}</li>`).join("")}</ul></details>
-            ${citation(c.id,[...new Set(D.examExamples[c.id].flatMap(e=>e.refs))])}
+            ${citation(c.id,D.examReferences[c.id])}
           </section>`;
         }).join("")}
-        <div class="actions"><button id="exam-download">Save a text copy</button><button class="primary" id="exam-discard">Start another rehearsal</button><button id="exam-home">Back to home</button></div>`;
+        <div class="actions"><button id="exam-download">Save a text copy</button><button class="primary" id="exam-discard">Start another rehearsal</button><button id="exam-home">Practice a different mode</button></div>`;
       document.querySelector("#exam-download").onclick=download;
       document.querySelector("#exam-discard").onclick=discard;
       document.querySelector("#exam-home").onclick=home;
@@ -263,5 +269,5 @@ window.EXAM = (() => {
     });
     return {render,reset:()=>{pendingAction=null;if(dialog.open)dialog.close();}};
   }
-  return {uiVersion:12,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
+  return {uiVersion:13,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
 })();

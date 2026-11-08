@@ -69,7 +69,8 @@ test("primary and reinforcing citations refer to real 2025 sub-competencies", ()
     refs(q.c, q.refs);
     for (const other of q.also || []) { assert.notEqual(other.c, q.c); refs(other.c, other.refs); }
   }
-  for (const [c, examples] of Object.entries(data.examExamples)) for (const example of examples) refs(Number(c), example.refs);
+  assert.equal(data.examExamples, undefined);
+  for (const [c, references] of Object.entries(data.examReferences)) refs(Number(c), references);
   for (const node of Object.values(data.scenario.nodes)) refs(node.c, node.refs);
 });
 
