@@ -2,9 +2,20 @@
 
 `worker.mjs` serves the GitHub Pages app at `https://smartify.space/coaching/`. Deploy it as an ES-module Cloudflare Worker with no bindings, secrets or package dependencies.
 
+## Current deployment
+
+| Setting | Value |
+| --- | --- |
+| Worker | `coaching-pages-proxy` |
+| Route | `smartify.space/coaching*` |
+| Compatibility date | `2026-11-07` |
+| Main module | `cloudflare/worker.mjs` |
+
+The site's firewall must allow public GET/HEAD requests to host `smartify.space` for exactly `/coaching` and `/coaching/` descendants. Keep any required exception limited to that host, method and path boundary. Other paths and security rules retain their existing behavior.
+
 ## Deploy
 
-1. Create a Worker and upload the exact contents of `cloudflare/worker.mjs` as its main ES module.
+1. Update `coaching-pages-proxy` with the exact contents of `cloudflare/worker.mjs` as its main ES module, using the compatibility date above.
 2. Add the Worker route `smartify.space/coaching*` on the existing `smartify.space` zone. Cloudflare route matching includes query strings, so the trailing wildcard also covers `/coaching?v=10`.
 3. Keep the apex DNS record, existing Cloudflare Tunnel and GitHub Pages configuration unchanged. Leave the GitHub Pages custom-domain CNAME unset.
 4. Check `/coaching`, `/coaching/` and a versioned asset such as `/coaching/app.js?v=10`. Confirm that `/coaching-other` still reaches the existing origin.
