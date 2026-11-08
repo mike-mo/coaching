@@ -27,7 +27,7 @@ Open `http://127.0.0.1:8847/`. You can also open `index.html` directly, although
 
 ## GitHub Pages
 
-The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the six runtime files and sharing image into a static artifact and deploys that artifact using GitHub's Pages actions.
+The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the seven runtime files and sharing image into a static artifact and deploys that artifact using GitHub's Pages actions.
 
 Enable GitHub Pages with **GitHub Actions** as the source in the repository's Settings > Pages. The deployment environment records the published URL.
 
@@ -47,13 +47,15 @@ The renderer also accepts `-BrowserPath` for another installed Chromium browser.
 
 ## Saved data
 
-Study results, counters, review dates, conversation counts and exam answers stay in `localStorage` under `icf-practice-room-v1`. Theme choices use the separate `icf-study-theme-v1` key. Reset progress requires confirmation and leaves the theme choice unchanged.
+Study results, counters, review dates, conversation counts and exam answers stay in `localStorage` under `icf-practice-room-v1`. Theme choices use the separate `icf-study-theme-v1` key. The usage-statistics preference uses `icf-study-usage-opt-out-v1`. Reset progress requires confirmation and leaves theme and privacy choices unchanged.
 
 The exam timer stores a real deadline. Refreshing or returning later does not restart it; expiration saves the answers and opens review. Drafts save while editing. Storage failures are shown in the app, and a text download provides a backup.
 
 Storage is specific to the browser profile and origin, not synced between devices. Clearing site data or using private browsing may remove saved work. Use fictional examples in rehearsal.
 
-The app has no analytics, login, AI service, external runtime scripts or tracking widget. Opening the official source or optional coffee link visits an external site in a new tab.
+The local and GitHub Pages versions use no analytics or external runtime scripts. On `https://smartify.space/coaching/`, an intentional Cloudflare Web Analytics beacon provides basic page metrics, and a first-party collector counts study-mode starts and completions. Neither is required to study. Do Not Track, Global Privacy Control and the saved Sources & about opt-out disable usage statistics. If the beacon has already loaded, study counts stop immediately and the Sources message explains that a later reload stops the beacon too.
+
+Custom events contain only schema version, event and mode. They contain no visitor identifiers, cookies, IP addresses, referrers, query strings, answers, scores, competency details or draft text. Counts are events, not unique people. See [Cloudflare deployment and analytics](cloudflare/README.md) for setup, lifecycle definitions and authenticated aggregate queries. There is no public analytics query endpoint, login or AI service. Opening the official source or optional coffee link visits an external site in a new tab.
 
 ## Sources and limitations
 

@@ -41,7 +41,7 @@ window.EXAM = (() => {
     ].filter(Boolean).join(" ")};
   }
   function create(options) {
-    const {get,set,save,storageError,hasStorageFailure,announce,escape,focus,home,isVisible,onFinished,citation} = options;
+    const {get,set,save,storageError,hasStorageFailure,announce,escape,focus,home,isVisible,onFinished,onStarted,onCompleted,citation} = options;
     const D = window.STUDY;
     const main = document.querySelector("main");
     const checkIcon = '<svg class="exam-check-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -78,7 +78,8 @@ window.EXAM = (() => {
       if (!a || a.status !== "draft") return;
       a.status=status;
       a.finishedAt=status === "expired" ? a.deadline : Date.now();
-      save();
+      const saved=save();
+      if(saved)onCompleted?.();
       pendingAction=null;
       if(dialog.open)dialog.close();
       if(refresh){
@@ -153,6 +154,7 @@ window.EXAM = (() => {
         set({mode,status:"draft",startedAt,deadline:mode === "timed" ? startedAt+duration : null,finishedAt:null,
           answers:Array.from({length:8},()=>({title:"",bullets:["","",""]}))});
         const saved=save();render();focus("#exam-title-1");
+        if(saved)onStarted?.();
         announce(saved ? "Rehearsal started. Your answers save as you type." : "Rehearsal started, but your browser couldn't save it. Keep this tab open or save a text copy.");
       };
       document.querySelector("#exam-home").onclick=home;

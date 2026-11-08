@@ -4,6 +4,8 @@
   const KEY = "icf-practice-room-v1";
   const main = document.querySelector("main");
   const warning = document.querySelector("#storage-warning");
+  const usage = window.USAGE;
+  if (!usage) console.warn("Study usage module is unavailable. Studying is unaffected.");
   const empty = () => ({version:1, items:{}, scenarios:0, exam:null, hintedSuccessIndex:0});
   const hintedSuccessMessages = ["You got it!", "That's it!", "Nice work!"];
   const hintedSuccessSupport = "Hints help you learn. Keep practicing until you can remember it without them.";
@@ -70,7 +72,8 @@
   const titleLabel = window.EXAM.titleLabel;
   const exam = window.EXAM.create({get:()=>state.exam,set:a=>{state.exam=a;},save,storageError,
     hasStorageFailure:()=>saveFailed,announce,escape,focus,home:()=>navigate("home"),
-    isVisible:()=>view==="exam",onFinished:()=>{if(view==="home")renderHome();},citation});
+    isVisible:()=>view==="exam",onStarted:()=>usage?.begin("exam"),
+    onCompleted:()=>usage?.complete("exam"),onFinished:()=>{if(view==="home")renderHome();},citation});
   const totals = field => Object.values(state.items).reduce((n,p) => n+p[field],0);
   const outcomeLabels = {unaided:"Without hints",assisted:"With hints",recognition:"Correct answer",missed:"Wrong answer"};
   const isDue = id => !state.items[id] || state.items[id].due <= Date.now();
@@ -81,6 +84,8 @@
   }
   function navigate(next) {
     view=next; session=null; active=null;
+    if (next==="recall" || next==="questions") usage?.begin(next==="recall"?"titles":"questions");
+    if (next==="scenario") usage?.begin("conversation");
     if (next==="scenario") { scenarioNode=D.scenario.start; history=[]; branchChoice=null; }
     render(); focus();
   }
@@ -136,6 +141,7 @@
       items=spread.concat(ranked.filter(item=>!spread.includes(item)));
     }
     session={items:items.slice(0,count),index:0,results:[],type};
+    usage?.begin(type==="recall"?"titles":type);
     view=type==="mixed"?"recall":type;
     active=null; render(); focus();
   }
@@ -198,6 +204,7 @@
       if(!a.assistLogged)record(a.item.id,a.outcome);
       else if(!match){state.items[a.item.id].missed++;save();}
       else save();
+      if (!session) usage?.item("titles",a.item.id,D.competencies.length);
       renderRecall(); focus("#study-card h3"); announce(match?`${a.successMessage || "Correct!"}${a.successMessage?` With hints. ${hintedSuccessSupport}`:""}`:"The wording doesn't match. Check the official title against your answer.");
     };
     document.querySelector("#hint").onclick=()=>{
@@ -209,6 +216,7 @@
       if(a.done)return;
       a.revealed=true;a.done=true;a.outcome="assisted";
       if(!a.assistLogged){record(a.item.id,"assisted");a.assistLogged=true;}
+      if (!session) usage?.item("titles",a.item.id,D.competencies.length);
       renderRecall();focus("#study-card h3");announce(`${titleLabel(c)}. Pass counts as with hints.`);
     };
   }
@@ -223,7 +231,9 @@
     document.querySelectorAll("[data-option]").forEach(b=>b.onclick=()=>{
       a.selected=Number(b.dataset.option); a.done=true;
       a.outcome=a.selected===q.answer?"recognition":"missed";
-      record(a.item.id,a.outcome);renderQuestion();focus("#study-card .feedback h3");announce(a.outcome==="recognition"?"Correct answer. You can read the reason beside each option.":"Another reply fits better here. Your answer and the best response are labeled. You can read the reason beside each option.");
+      record(a.item.id,a.outcome);
+      if (!session) usage?.item("questions",a.item.id,D.questions.length);
+      renderQuestion();focus("#study-card .feedback h3");announce(a.outcome==="recognition"?"Correct answer. You can read the reason beside each option.":"Another reply fits better here. Your answer and the best response are labeled. You can read the reason beside each option.");
     });
     if(a.done)document.querySelector("#next-item").onclick=nextItem;
   }
@@ -238,6 +248,7 @@
     active=null;renderStudy();focus();
   }
   function renderComplete() {
+    usage?.complete(session.type==="recall"?"titles":session.type);
     const count=outcome=>session.results.filter(r=>r.outcome===outcome).length;
     const misses=session.results.filter(r=>r.missed).length;
     main.innerHTML=`<p class="eyebrow">Mixed practice</p><h1>Practice complete.</h1><p class="lead">You finished ${session.results.length} practice items.</p><div class="stats"><div class="stat"><strong>${count("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${count("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${count("recognition")}</strong><span>Questions correct</span></div></div><p>${misses} wrong answer${misses===1?"":"s"}. If you missed an answer or used help, try it again in 10 minutes. Correct titles without hints and correct question answers follow the 1, 3, then 7 day schedule.</p><button class="primary" id="back-home">Back to home</button>`;
@@ -259,7 +270,7 @@
     document.querySelector("#continue-scenario")?.addEventListener("click",()=>{
       const choice=node.choices[branchChoice];history.push({node:scenarioNode,choice});
       scenarioNode=choice.next;branchChoice=null;
-      if(scenarioNode===null){state.scenarios++;save();}
+      if(scenarioNode===null){state.scenarios++;save();usage?.complete("conversation");}
       renderScenario();focus();
     });
   }
@@ -272,6 +283,7 @@
     try {localStorage.removeItem(KEY);state=empty();saveFailed=false;exam.reset();warning.hidden=true;document.querySelector("#reset-dialog").close();navigate("home");announce("Study progress and rehearsal deleted.");}
     catch {document.querySelector("#reset-dialog").close();storageError("Your browser couldn't delete progress. You can remove it by clearing site data for this local address.");}
   };
+  if (state.exam?.status==="draft") usage?.resume("exam");
   exam.expire();
   render();
 })();

@@ -28,7 +28,7 @@ jobs:
       - name: Prepare static files
         run: |
           mkdir _site
-          cp index.html styles.css theme.js content.js exam.js app.js _site/
+          cp index.html styles.css theme.js content.js exam.js analytics.js app.js _site/
           mkdir _site/assets
           cp assets/share-card.png _site/assets/
       - name: Upload Pages artifact
