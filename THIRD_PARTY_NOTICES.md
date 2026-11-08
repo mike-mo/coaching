@@ -12,4 +12,4 @@ Copyright and other rights in ICF material remain with their respective owner. T
 
 ## Other assets
 
-Interface icons are inline original SVGs. Fonts are supplied by the browser or operating system. The app bundles no third-party runtime libraries, images, PDFs, proprietary question banks, recordings or client material.
+Interface icons and the sharing card are original SVG artwork. The card is rendered to PNG. Fonts are supplied by the browser or operating system. The app bundles no third-party runtime libraries or third-party images. Source PDFs, proprietary question banks, recordings and client material are not included.

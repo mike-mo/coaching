@@ -27,11 +27,23 @@ Open `http://127.0.0.1:8847/`. You can also open `index.html` directly, although
 
 ## GitHub Pages
 
-The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies only the six runtime files into a static artifact and deploys that artifact using GitHub's Pages actions.
+The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the six runtime files and sharing image into a static artifact and deploys that artifact using GitHub's Pages actions.
 
 Enable GitHub Pages with **GitHub Actions** as the source in the repository's Settings > Pages. The deployment environment records the published URL.
 
 All app assets use relative URLs. The app works at a GitHub project-site subpath and does not require server-side routing. Navigation stays within the page.
+
+## Sharing image
+
+The initial HTML includes a canonical URL, Open Graph metadata and a Twitter large-image card. The original 1200x630 PNG is `assets/share-card.png`; edit `assets/share-card.svg` to change the design.
+
+On Windows with Edge installed, regenerate the PNG from the repository root:
+
+```powershell
+.\tools\render-share-card.ps1
+```
+
+The renderer also accepts `-BrowserPath` for another installed Chromium browser. It uses local system fonts and an isolated temporary profile, with no packages or external assets.
 
 ## Saved data
 
