@@ -2,6 +2,7 @@
 window.STUDY = {
   source: "2025 ICF Core Competencies",
   version: "Released September 2025 · rev. 09.08.25",
+  examInstruction: "Write the names of all eight core competencies exactly, in order, then summarize each in three sentences in your own words. After another rehearsal, you can compare your answers with your previous answers.",
   subcompetencies: {
     "1.01": "Demonstrates personal integrity and honesty in interactions with clients, sponsors and relevant stakeholders",
     "1.02": "Is sensitive to clients' identity, environment, experiences, values and beliefs",

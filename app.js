@@ -44,7 +44,7 @@
   });
   const theme=document.querySelector("#theme-toggle"),themeAnchor=document.createComment("theme-home");
   theme.before(themeAnchor);
-  let flow=null,clockStarted=null,answerStarted=null,launchFocus=null,introMode=null;
+  let flow=null,clockStarted=null,answerStarted=null,launchFocus=null,introMode=null,returnView=null,modalStarted=false;
   const modeNames={recall:"Name practice",questions:"Questions",mixed:"Mixed practice",scenario:"Conversation",exam:"Exam rehearsal"};
   const usageMode=mode=>({recall:"titles",scenario:"conversation"}[mode] || mode);
   const coffeeWarning=document.querySelector("#coffee-warning");
@@ -71,12 +71,16 @@
   function openShell(){
     if(dialog.open)return;
     launchFocus=document.activeElement;
+    returnView={view,session,active,flow,scenarioNode,history,branchChoice,introMode,scrollY:window.scrollY,nodes:document.createDocumentFragment()};
+    returnView.nodes.append(...main.childNodes);
+    modalStarted=false;
     document.querySelector("#study-body").append(main);
     moved.forEach(({element})=>document.querySelector("#study-errors").append(element));
     document.querySelector(".study-head-actions").append(theme);
     document.body.classList.add("study-open");dialog.showModal();
   }
   function beginFlow(mode,saved=null){
+    modalStarted=true;
     flow=saved?JSON.parse(JSON.stringify(saved)):{version:1,mode,elapsedMs:0,answerMs:0,responses:[],completed:false,snapshot:null};
     clockStarted=performance.now();answerStarted=null;introMode=null;
     if(mode==="exam" && state.exam){
@@ -121,17 +125,29 @@
       mode==="scenario"?"Choose what you would say to a fictional client, then explore a possible reply. Practice noticing what the client wants, questioning your assumptions and choosing how to follow up. Compare the reasoning behind different replies. This conversation has no score.":
       mode==="mixed"?"Eight items mix competency names and coaching questions. Recall names from memory; choose the strongest question response for the moment.":
       "More than one response may fit. Choose the strongest option for this moment.";
-    main.innerHTML=`<section class="study-intro"><div class="intro-mark" aria-hidden="true">8</div><h1>${modeNames[mode]}</h1><p>${copy}</p>${mode==="scenario"?`<h2>${escape(D.scenario.title)}</h2><p>${escape(D.scenario.intro)}</p>`:""}<p>Take your time. You can revisit the reasoning after answering. Close with X to see your session results and keep your place.</p>${mode==="questions"?`<details open><summary>About the practice score</summary><p>Strongest responses start at 90 points, valid approaches at 80. Both can add up to 10 speed points: answers within 4 seconds get the same maximum bonus, declining to zero at 64 seconds. Less suitable responses get no points. Only answer time counts, not feedback reading. This is a study mechanic, not an ICF assessment.</p></details>`:""}</section>`;
+    main.innerHTML=`<section class="study-intro"><div class="intro-mark" aria-hidden="true">8</div><h1>${modeNames[mode]}</h1><p>${copy}</p>${mode==="scenario"?`<h2>${escape(D.scenario.title)}</h2><p>${escape(D.scenario.intro)}</p>`:""}<p>Take your time. You can revisit the reasoning after answering. You can close this introduction without starting.</p>${mode==="questions"?`<details open><summary>About the practice score</summary><p>Strongest responses start at 90 points, valid approaches at 80. Both can add up to 10 speed points: answers within 4 seconds get the same maximum bonus, declining to zero at 64 seconds. Less suitable responses get no points. Only answer time counts, not feedback reading. This is a study mechanic, not an ICF assessment.</p></details>`:""}</section>`;
     updateShell();
     const button=document.createElement("button");button.id="begin-practice";button.className="primary";button.textContent="Start "+modeNames[mode].toLowerCase();
     button.onclick=()=>startMode(mode);document.querySelector("#study-dock").append(button);focus();
   }
+  function closeShell(){
+    dialog.close();document.body.classList.remove("study-open");
+    homeAnchor.after(main);moved.forEach(({element,anchor})=>anchor.after(element));themeAnchor.after(theme);
+  }
   function closeStudy(){
+    if(!modalStarted && returnView){
+      const previous=returnView;returnView=null;
+      closeShell();main.replaceChildren(previous.nodes);
+      ({view,session,active,flow,scenarioNode,history,branchChoice,introMode}=previous);
+      clockStarted=null;answerStarted=null;updateNavigation();
+      (launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus({preventScroll:true});
+      window.scrollTo(0,previous.scrollY);
+      return;
+    }
     if(flow){pause();stash();}
     if(!save()){if(flow){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}return;}
     const result=flow || {mode:introMode || view,elapsedMs:0,responses:[],completed:false};
-    dialog.close();document.body.classList.remove("study-open");
-    homeAnchor.after(main);moved.forEach(({element,anchor})=>anchor.after(element));themeAnchor.after(theme);
+    closeShell();returnView=null;
     view="home";updateNavigation();renderSummary(result);
   }
   function renderSummary(result){
@@ -148,7 +164,7 @@
       const pending=pendingRecall?.item.c===c.id;
       const practiced=examMode?!!answer&&(!!answer.title.trim()||answer.bullets.some(b=>b.trim())):rows.length>0 || pending;
       const label=examMode && draft?.status==="draft" || result.mode==="recall" && !rows.length?`C${c.id}`:titleLabel(c);
-      return `<section class="competency-stat ${practiced?"":"unseen"}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.points(r.outcome,r.seconds),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Name entered":"Name blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 points written${titleMatches?` · ${titleMatches[c.id-1]?"Name matches":"Name needs review"}`:""}</p>`:
+      return `<section class="competency-stat ${practiced?"":"unseen"}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.points(r.outcome,r.seconds),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Name entered":"Name blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 sentence fields filled${titleMatches?` · ${titleMatches[c.id-1]?"Name matches":"Name needs review"}`:""}</p>`:
       `${qs.length?`<p>${count("recognition")} strongest · ${count("reasonable")} valid · ${count("missed")} to improve</p><p>${qs.length} answered · average answer time ${P.duration(qs.reduce((n,r)=>n+r.seconds,0)/qs.length*1000)}</p>`:""}${names.length?`<p>${names.filter(r=>r.matched&&r.outcome==="unaided").length} correct without hints · ${names.filter(r=>r.outcome==="assisted").length} with hints or Pass · ${names.filter(r=>!r.matched&&!r.revealed).length} need another look</p>`:""}${pending?`<p>Unfinished name attempt${pendingRecall.hints?` · ${pendingRecall.hints} hint${pendingRecall.hints===1?"":"s"} used`:""}. Resume to continue.</p>`:""}${conversation.length?`<p>${conversation.length} fictional conversation choice${conversation.length===1?"":"s"} explored. No automated score.</p>`:""}`}</section>`;
     }).join("")}</div><details class="summary-help" open><summary>About these results</summary><p>These are practice results, not an official ICF assessment. ${q.length?"Question scores use 90 / 80 / 0 base points plus up to 10 accepted-response speed points, capped through 4 seconds and tapering to zero at 64 seconds. The competency score is the rounded mean of answered questions only.":""} Name recall, conversation choices and exam points are not speed-scored. Exam practice time counts up and pauses while you are away.</p></details>${coffee.eligible()?`<aside id="coffee-reminder" class="coffee-card"><h2>Say thanks</h2><p>Enjoying the practice? A coffee would make my day!</p><div class="actions"><a href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action">Buy me a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`:""}<div class="summary-actions actions"><button id="summary-home">Home</button><button class="primary" id="resume-practice">${result.completed?"Practice again":"Resume "+(modeNames[result.mode] || "practice").toLowerCase()}</button></div></section>`;
     document.querySelector("#summary-home").onclick=()=>{flow=null;view="home";renderHome();(launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus();};
@@ -158,6 +174,7 @@
   }
   function updateShell(){
     if(!dialog.open)return;
+    document.querySelector("#close-study").setAttribute("aria-label",modalStarted?"Close study and show session results":"Close introduction");
     const mode=flow?.mode || introMode || view;
     document.querySelector("#study-mode").textContent=modeNames[mode] || "Practice";
     document.querySelector("#study-position").textContent=session?`${Math.min(session.index+1,session.items.length)} / ${session.items.length}`:"";
@@ -334,7 +351,7 @@
       <div class="mixed-start"><button class="primary" id="start-mixed">${state.practices.mixed && !state.practices.mixed.completed?"Resume mixed practice":"Start mixed practice"}</button><p class="muted">Eight items across all competencies, mixing names and questions.</p></div>
       <details class="review-list"><summary>Your review dates · ${items.length} items</summary><p class="muted">Your last result and next review for each name and scenario. "New" means you haven't tried it. You can practice any time.</p>${items.map(item=>`<div class="review-row"><span>${item.type==="recall"?titleLabel(comp(item.c)):escape(D.questions.find(q=>q.id===item.id).label)}<small>${item.type==="recall"?"Name practice":"Coaching scenario"}${state.items[item.id] ? ` · last time: ${outcomeLabels[state.items[item.id].last]}` : ""}</small></span><span>${dueLabel(item.id)}</span></div>`).join("")}</details></section>
       <section class="independent-practice" aria-labelledby="independent-title"><h2 id="independent-title">Written practice</h2>
-      <article class="experience"><span class="number">WRITTEN EXAM</span><h3>Exam rehearsal</h3><p>Write all eight names in order and three points for each. See your elapsed time and compare completed passes for self-evaluation.</p><button data-start="exam">${state.exam?.status==="draft"?"Resume rehearsal":state.exam?"Review rehearsal":"Start exam rehearsal"}</button></article></section>
+      <article class="experience"><span class="number">WRITTEN EXAM</span><h3>Exam rehearsal</h3><p>${escape(D.examInstruction)}</p><button data-start="exam">${state.exam?.status==="draft"?"Resume rehearsal":state.exam?"Review rehearsal":"Start exam rehearsal"}</button></article></section>
       <h2 class="progress-heading">Across all your practice</h2><section class="stats question-credit-stats" aria-label="Name practice and question credit counts"><div class="stat"><strong>${totals("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${totals("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${totals("recognition")}</strong><span>Strongest option</span></div><div class="stat"><strong>${totals("reasonable")}</strong><span>Valid approach</span></div></section>
       ${legacyQuestionIds.some(id=>state.items[id])?'<p class="muted">Earlier question results remain in your all-time counts. The new scenarios have their own review dates.</p>':""}
       <div class="reset-line"><span>Saved in this browser.</span><button id="reset">Reset progress</button></div>`;
@@ -531,8 +548,8 @@
   const base=document.currentScript?.src || location.href;
   const assets=[
     ["practice.js?v=1",!!window.PRACTICE],
-    ["exam.js?v=10",window.EXAM?.uiVersion===10],
-    ["content.js?v=8",!!window.STUDY?.subcompetencies],
+    ["exam.js?v=11",window.EXAM?.uiVersion===11],
+    ["content.js?v=9",!!window.STUDY?.examInstruction],
     ["styles.css?v=15",!!document.querySelector('link[href="styles.css?v=15"]')]
   ].filter(([,ready])=>!ready);
   if(!assets.length)start();

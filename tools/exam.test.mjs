@@ -44,3 +44,21 @@ test("public entry points hide conversation and preserve exact requested home co
   assert.match(home,/>Practice Core Competencies<\/button>/);
   assert.match(app,/Sources for this conversation/);
 });
+test("exam instructions distinguish exact names from three-sentence summaries",()=>{
+  const c={window:{}};
+  vm.runInNewContext(readFileSync(new URL("../content.js",import.meta.url),"utf8"),c);
+  assert.equal(c.window.STUDY.examInstruction,
+    "Write the names of all eight core competencies exactly, in order, then summarize each in three sentences in your own words. After another rehearsal, you can compare your answers with your previous answers.");
+  const source=readFileSync(new URL("../exam.js",import.meta.url),"utf8");
+  assert.match(source,/Sentence \$\{j\+1\}/);
+  assert.match(source,/escape\(D\.examInstruction\)/);
+  assert.doesNotMatch(source,/add three points|Use a timer\?/);
+});
+test("intro-only close restores prior view without saving or summarizing",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const close=app.slice(app.indexOf("function closeStudy()"),app.indexOf("function renderSummary("));
+  const initial=close.slice(close.indexOf("if(!modalStarted"),close.indexOf("if(flow)"));
+  assert.match(initial,/replaceChildren\(previous\.nodes\)/);
+  assert.match(initial,/focus\(\{preventScroll:true\}\)/);
+  assert.doesNotMatch(initial,/save\(|renderSummary|usage/);
+});

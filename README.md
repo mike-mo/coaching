@@ -9,14 +9,16 @@ A small browser-based study app for the eight ICF core competencies. Practice ex
 - Single-select best-fit practice with separate strongest-option and valid-approach credit. The competency, official definition and citations appear only after answering.
 - A short fictional branching conversation retained in the source and saved data, but hidden from public navigation and entry points while it is developed further.
 - Eight-item mixed practice across all competencies.
-- Exam rehearsal with eight ordered name fields and three explanation points per competency. An elapsed count-up timer with no time limit, saved drafts, optional comparison with the previous completed pass and a text-copy download.
+- Exam rehearsal with eight ordered name fields and a three-sentence summary in the user's own words for each competency. An elapsed count-up timer with no time limit, saved drafts, optional comparison with the previous completed pass and a text-copy download.
 - Local progress and a simple review schedule: help, a name mismatch or a less suitable response returns in 10 minutes; names without hints and both question-credit categories follow 1, 3, then 7 days.
 - Light by default, remembered light/dark choices, and an explicit System setting.
-- Full-screen study dialogs in every mode, saved places, stable actions, keyboard controls, visible focus, screen-reader messages and reduced-motion support.
+- Full-screen study dialogs in every mode, saved places, stable actions, keyboard controls, visible focus, screen-reader messages and reduced-motion support. Closing an initial introduction without starting returns to the prior view with launch focus restored, without a new session summary or mode event.
 - Per-competency closing results based on actual responses. Questions use correctness-first scoring: strongest 90, valid 80, improvement 0, plus up to 10 speed points only for accepted responses. The bonus is capped through 4 seconds and decreases linearly to zero at 64 seconds. Feedback, introductions and time away are excluded. Scores are rounded means of answered questions, including zero-point responses; unseen competencies have no score.
 - An optional coffee reminder below closing results from the third distinct visitor-local calendar day onward. It repeats at eligible summaries until Not now, which suppresses it for that local day only. The footer link remains available.
 
 Names are checked for the official words in order, ignoring capitalization, extra spaces and punctuation around words. C1-C8 are display labels; type only the name. Exam explanations are preserved for self-review, not automatically graded.
+
+Only the names are requested exactly. Definitions are study references. The three existing text fields now ask for one summary sentence each; their stored `bullets` IDs and all earlier answers remain unchanged. The app does not count sentences or grade their meaning automatically.
 
 Question and option order vary. Review lists use narrative labels without revealing the evaluated competency. Each item has one authored strongest option; some have other valid approaches that earn credit and advance the review schedule. A valid approach does not increment strongest-option totals or count as missed. Less suitable means less suitable in the stated moment, not a universally wrong coaching behavior. These are study judgments, not validated ICF exam keys or assessment percentages.
 

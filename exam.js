@@ -65,7 +65,7 @@ window.EXAM = (() => {
     function blanksText(missing) {
       return [
         missing.titles ? `${missing.titles} name${missing.titles===1?"":"s"}` : "",
-        missing.bullets ? `${missing.bullets} point${missing.bullets===1?"":"s"}` : ""
+        missing.bullets ? `${missing.bullets} sentence field${missing.bullets===1?"":"s"}` : ""
       ].filter(Boolean).join(" and ");
     }
     function confirm(title, message, label, action, cancelLabel = "Keep this rehearsal") {
@@ -98,7 +98,7 @@ window.EXAM = (() => {
       if(isVisible()){render();focus();}
       else onFinished();
       const matches=a.answers.filter((answer,i)=>compareTitle(answer.title,i+1,D.competencies).kind==="match").length;
-      announce(`${matches} of 8 names correct. Review your three points for each competency.`);
+      announce(`${matches} of 8 names correct. Review your three-sentence summary for each competency.`);
     }
     function discard() {
       const a=get();
@@ -147,9 +147,9 @@ window.EXAM = (() => {
       if(element)element.textContent=hasStorageFailure() ? "Not saved. Keep this tab open or save a text copy." : "Saved in this browser.";
     }
     function renderSetup() {
-      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Exam rehearsal</h1><p class="lead">Write all eight names in order, exactly as ICF names them. For each one, add three points in your own words about what a coach says or does in a session.</p>
+      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Exam rehearsal</h1><p class="lead">${escape(D.examInstruction)}</p>
         <section class="card exam-setup"><p>Type the names without their C numbers. The timer counts up while you write, with no time limit. Closing pauses it; returning resumes your saved time.</p>
-        <p class="muted">${getPrevious() ? "Your previous completed pass is saved. You can choose to compare it with what you write next." : "After your first completed pass, you can keep it to compare with your next rehearsal."} Your points are for self-evaluation, not automatic grading.</p>
+        <p class="muted">${getPrevious() ? "Your previous completed pass is saved. You can choose to compare it with what you write next." : "After your first completed pass, you can keep it to compare with your next rehearsal."} Your summaries are for self-evaluation, not automatic grading.</p>
         <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
       document.querySelector("#exam-start").onclick=()=>{
         if(get())return;
@@ -163,14 +163,14 @@ window.EXAM = (() => {
       document.querySelector("#exam-home").onclick=home;
     }
     function renderDraft(a) {
-      main.innerHTML=`<p class="eyebrow">Exam rehearsal</p><h1>Write from memory.</h1><p class="lead">Eight names in order, with three points for each about what a coach does in a session. Use your own words for the points.</p>
+      main.innerHTML=`<p class="eyebrow">Exam rehearsal</p><h1>Write from memory.</h1><p class="lead">${escape(D.examInstruction)}</p>
         <div class="exam-toolbar"><span id="exam-save"></span><span class="exam-clock"><strong id="exam-time" role="timer" aria-live="off">00:00</strong></span></div>
-        <p class="muted">Change any answer before you finish. Your draft saves as you type; you can leave and come back to it. Use fictional examples and leave out client details.</p>
+        <p class="muted">Write one sentence in each of the three fields. Change any answer before you finish. Your draft saves as you type; you can leave and come back to it. Use fictional examples and leave out client details.</p>
         ${getPrevious()?'<p><a href="#exam-comparison" id="exam-compare-link">Compare with your previous pass</a> when you want to review what has changed.</p>':""}
         <nav class="exam-jumps" aria-label="Go to a numbered competency">${a.answers.map((_,i)=>`<a href="#exam-slot-${i+1}" aria-label="Go to C${i+1}">C${i+1}</a>`).join("")}</nav>
         <form id="exam-form">${a.answers.map((answer,i)=>`<fieldset class="card exam-slot" id="exam-slot-${i+1}"><legend>C${i+1}</legend>
           <label for="exam-title-${i+1}">Name for C${i+1}</label><input id="exam-title-${i+1}" data-exam-slot="${i}" data-exam-field="title" value="${escape(answer.title)}" autocomplete="off" spellcheck="false">
-          ${answer.bullets.map((bullet,j)=>`<label for="exam-bullet-${i+1}-${j+1}">Point ${j+1}</label><textarea id="exam-bullet-${i+1}-${j+1}" data-exam-slot="${i}" data-exam-field="${j}" rows="3">${escape(bullet)}</textarea>`).join("")}
+          ${answer.bullets.map((bullet,j)=>`<label for="exam-bullet-${i+1}-${j+1}">Sentence ${j+1}</label><textarea id="exam-bullet-${i+1}-${j+1}" data-exam-slot="${i}" data-exam-field="${j}" rows="3">${escape(bullet)}</textarea>`).join("")}
           </fieldset>`).join("")}</form>${comparison(a)}<div class="actions"><button class="primary" type="submit" form="exam-form">Finish rehearsal</button><button id="exam-download" type="button">Save a text copy</button><button id="exam-discard" type="button">Discard draft</button><button id="exam-home" type="button">Back to home</button></div>`;
       document.querySelectorAll("[data-exam-slot]").forEach(input=>{
         input.addEventListener("input",()=>{
@@ -211,12 +211,12 @@ window.EXAM = (() => {
     function comparisonAnswers(current,previous) {
       return current.answers.map((answer,i)=>`<section class="exam-comparison-slot"><h3>C${i+1}</h3><div class="exam-comparison-grid">${[
         ["Previous pass",previous.answers[i]],["This pass",answer]
-      ].map(([label,value])=>`<div><h4>${label}</h4><p class="definition-label">Name</p><p class="submitted-answer">${escape(value.title) || "(blank)"}</p><p class="definition-label">Three points</p><ol class="submitted-bullets">${value.bullets.map(b=>`<li class="submitted-answer">${escape(b) || "(blank)"}</li>`).join("")}</ol></div>`).join("")}</div></section>`).join("");
+      ].map(([label,value])=>`<div><h4>${label}</h4><p class="definition-label">Name</p><p class="submitted-answer">${escape(value.title) || "(blank)"}</p><p class="definition-label">Your summary</p><ol class="submitted-bullets">${value.bullets.map(b=>`<li class="submitted-answer">${escape(b) || "(blank)"}</li>`).join("")}</ol></div>`).join("")}</div></section>`).join("");
     }
     function comparison(a) {
       const previous=getPrevious();
       if(!previous)return "";
-      return `<details class="exam-comparison" id="exam-comparison"><summary>Compare with your previous pass</summary><p>Previous pass finished ${escape(new Date(previous.finishedAt).toLocaleString())}. Opening this shows your earlier answers. They stay separate from your current draft.</p><p>What is clearer now? Which points describe different coaching behaviors? What would you revise? These written points are for your own evaluation.</p><div class="exam-comparison-content">${comparisonAnswers(a,previous)}</div></details>`;
+      return `<details class="exam-comparison" id="exam-comparison"><summary>Compare with your previous pass</summary><p>Previous pass finished ${escape(new Date(previous.finishedAt).toLocaleString())}. Opening this shows your earlier answers. They stay separate from your current draft.</p><p>What is clearer now? Which parts of the competency does each sentence describe? What would you revise? These summaries are for your own evaluation.</p><div class="exam-comparison-content">${comparisonAnswers(a,previous)}</div></details>`;
     }
     function renderReview(a) {
       const checks=a.answers.map((answer,i)=>compareTitle(answer.title,i+1,D.competencies));
@@ -224,10 +224,10 @@ window.EXAM = (() => {
       const missing=incomplete(a);
       main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your name results"}</h1>
         <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Name results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 names correct</p><p class="exam-score-description">Exact names in the right numbered positions.</p></div></section>
-        <p class="lead">Names are checked automatically. Review your three points for each competency below.</p>
+        <p class="lead">Names are checked automatically. Review your three-sentence summary for each competency below.</p>
         ${comparison(a)}
         ${missing.titles || missing.bullets ? `<p>${blanksText(missing)} ${missing.titles+missing.bullets===1?"was":"were"} left blank.</p>` : ""}
-        <section class="feedback"><h2>Review your three points</h2><p>Check each point: is it something a coach would say or do? Does it fit this competency? Have you made three different points?</p><p>Use the definitions and examples to check your answers. Some competencies also cover a coach's learning and work outside sessions.</p></section>
+        <section class="feedback"><h2>Review your summaries</h2><p>Does each summary capture the competency? Are the three sentences in your own words? Do they describe different parts of it?</p><p>Use the definitions and examples to check your answers. Some competencies also cover a coach's learning and work outside sessions.</p></section>
         <p class="muted">Capital letters, extra spaces and punctuation around words don't affect the name check.</p>
         <div id="exam-save" class="muted"></div><span class="exam-clock"><strong id="exam-time" role="timer" aria-live="off"></strong></span>
         ${a.answers.map((answer,i)=>{
@@ -237,7 +237,7 @@ window.EXAM = (() => {
           return `<section class="card exam-review-slot"><div class="card-head"><span>C${i+1}</span>${check.kind==="match"?"":`<span class="pill">${check.kind==="wrong-slot"?"Right name, wrong place":check.kind==="blank"?"Left blank":"Check the wording"}</span>`}</div>
             <p class="definition-label">Official name</p><h2>${escape(titleLabel(c))}</h2><p><strong>Your name:</strong> <span class="submitted-answer">${escape(submittedTitle) || "(blank)"}</span></p>
             <p class="exam-title-check ${check.kind==="match"?"got-it":""}">${check.kind==="match"?`${checkIcon}<strong>${escape(check.message)}</strong>`:escape(check.message)}</p><p class="definition-label">Official definition</p><blockquote class="competency-definition">"${escape(c.definition)}"</blockquote>
-            <h3>Your three points</h3><ol class="submitted-bullets">${answer.bullets.map(b=>`<li class="submitted-answer">${b.trim()?escape(b):"<span class='muted'>Left blank</span>"}</li>`).join("")}</ol>
+            <h3>Your summary</h3><ol class="submitted-bullets">${answer.bullets.map(b=>`<li class="submitted-answer">${b.trim()?escape(b):"<span class='muted'>Left blank</span>"}</li>`).join("")}</ol>
             <details open><summary>Examples of what a coach might do</summary><ul class="exam-examples">${D.examExamples[c.id].map(e=>`<li>${escape(e.text)}</li>`).join("")}</ul></details>
             ${citation(c.id,[...new Set(D.examExamples[c.id].flatMap(e=>e.refs))])}
           </section>`;
@@ -263,5 +263,5 @@ window.EXAM = (() => {
     });
     return {render,reset:()=>{pendingAction=null;if(dialog.open)dialog.close();}};
   }
-  return {uiVersion:10,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
+  return {uiVersion:11,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
 })();
