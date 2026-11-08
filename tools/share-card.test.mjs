@@ -51,7 +51,12 @@ test("source clock starts at C8 on top and runs C1 through C7 clockwise", () => 
 
 test("Pages includes only runtime files and the PNG, not source tools or Workers", () => {
   const workflow = readFileSync(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
-  assert.match(workflow, /cp index\.html styles\.css theme\.js content\.js exam\.js analytics\.js app\.js _site\//);
+  assert.match(workflow, /cp index\.html styles\.css theme\.js content\.js exam\.js analytics\.js practice\.js app\.js _site\//);
   assert.match(workflow, /cp assets\/share-card\.png _site\/assets\//);
   assert.doesNotMatch(workflow, /cp\s+(-r\s+)?(\.\/?|\*)\s/);
+});
+
+test("official resource links retain the ICF domain and competency path",()=>{
+  assert.match(html,/https:\/\/coachingfederation\.org\/credentialing\/coaching-competencies\/icf-core-competencies\//);
+  assert.doesNotMatch(html,/coachprepfederation|coachprep-competencies/);
 });

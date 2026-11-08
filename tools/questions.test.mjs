@@ -69,9 +69,11 @@ test("primary and reinforcing citations refer to real 2025 sub-competencies", ()
 test("question feedback stays conditional and all four classifications have rationale rows", () => {
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const question = app.slice(app.indexOf("function renderQuestion()"), app.indexOf("function nextItem()"));
-  assert.match(question, /a\.done\?`<div class="feedback/);
+  assert.match(question, /a\.done\?`<details class="review-question"/);
   assert.match(question, /"ABCD"\[position\]/);
-  assert.match(question, /a\.done\?`<span class="option-result">/);
+  assert.match(question, /class="answer-card/);
+  assert.match(question, /What competency is at play/);
+  assert.match(question, /class="rationale-panel"><hr>/);
   assert.doesNotMatch(question, /:citation\(q\.c/);
   assert.match(app, /outcome === "reasonable"/);
   assert.match(app, /legacyQuestionIds/);

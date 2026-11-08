@@ -65,13 +65,13 @@ Each point contains only `blobs: [event, mode, "1"]`, `doubles: [1]` and the enu
 
 | Mode | Start | Completion |
 | --- | --- | --- |
-| Titles | Explicit entry/restart | Every distinct title has been submitted or passed during that visit; hints alone do not finish it |
-| Questions | Explicit entry/restart | Every distinct question has been answered during that visit |
+| Names (`titles` event enum) | Start a new eight-item round, after its introduction | All eight names in that saved round have been submitted or passed; hints alone do not finish it |
+| Questions | Start a new 32-question round, after its introduction | All questions in that saved round have been answered |
 | Mixed | Explicit round start | All items in the existing round have been finished |
 | Conversation | Explicit entry/restart | The existing final branch transitions to its review |
 | Exam | A new rehearsal is successfully saved | A saved draft transitions to submitted or expired, including after resuming it |
 
-Renders, next-item clicks alone and finished-review visits do not send completion events. Reloading a saved unfinished exam does not send another start; a later real finish can send its completion. A submitted/expired saved exam cannot finish again on reload. Failed storage, privacy changes, rate limits, blocking or network loss can leave starts without completions or completions without a visible start. These counters are not unique-person counts, assessment results or a funnel guaranteed to balance. The client does not retry and never delays studying for analytics.
+Renders, introductions, next-item clicks alone and unfinished-session exits do not send completion events. Saved rounds can finish across visits. Resuming a saved practice or exam does not send another start; a later real finish can send its completion. Finished-review visits do not finish a session again. Failed storage, privacy changes, rate limits, blocking or network loss can leave starts without completions or completions without a visible start. These counters are not unique-person counts, assessment results or a funnel guaranteed to balance. The client does not retry and never delays studying for analytics.
 
 ## Aggregate study queries
 

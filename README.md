@@ -1,22 +1,24 @@
-# ICF core competency practice
+# Coachprep
 
-A small browser-based study app for the eight ICF core competencies. Practice exact titles, compare coaching choices, try a fictional conversation or rehearse a written exam.
+A small browser-based study app for the eight ICF core competencies. Practice exact names, compare coaching choices, try a fictional conversation or rehearse a written exam.
 
 ## Features
 
-- Title recall with progressive word hints, Pass and separate counts for answers with and without hints.
+- Name recall with progressive word hints, Pass and separate counts for answers with and without hints.
 - 32 original fictional coaching scenarios, four per primary competency, each with four plausible responses and a contextual explanation beside each option.
-- Single-select best-fit practice with separate strongest-fit and reasonable-fit credit. The competency, official definition and citations appear only after answering.
+- Single-select best-fit practice with separate strongest-option and valid-approach credit. The competency, official definition and citations appear only after answering.
 - A short fictional branching conversation with source-backed feedback.
 - Eight-item mixed practice across all competencies.
-- Exam rehearsal with eight ordered title fields and three explanation points per competency. Untimed by default, with an optional two-hour timer, saved drafts and a text-copy download.
-- Local progress and a simple review schedule: help, a title mismatch or a less suitable response returns in 10 minutes; titles without hints and both question-credit categories follow 1, 3, then 7 days.
+- Exam rehearsal with eight ordered name fields and three explanation points per competency. Untimed by default, with an optional two-hour timer, saved drafts and a text-copy download.
+- Local progress and a simple review schedule: help, a name mismatch or a less suitable response returns in 10 minutes; names without hints and both question-credit categories follow 1, 3, then 7 days.
 - Light by default, remembered light/dark choices, and an explicit System setting.
-- Responsive layouts, keyboard controls, visible focus, screen-reader messages and reduced-motion support.
+- Full-screen study dialogs in every mode, saved places, stable actions, keyboard controls, visible focus, screen-reader messages and reduced-motion support.
+- Per-competency closing results based on actual responses. Questions use correctness-first scoring: strongest 90, valid 80, improvement 0, plus up to 10 speed points only for accepted responses. The bonus is capped through 4 seconds and decreases linearly to zero at 64 seconds. Feedback, introductions and time away are excluded. Scores are rounded means of answered questions, including zero-point responses; unseen competencies have no score.
+- An optional coffee reminder below closing results from the third distinct visitor-local calendar day onward. It repeats at eligible summaries until Not now, which suppresses it for that local day only. The footer link remains available.
 
-Titles are checked for the official words in order, ignoring capitalization, extra spaces and punctuation around words. C1-C8 are display labels; type only the title. Exam explanations are preserved for self-review, not automatically graded.
+Names are checked for the official words in order, ignoring capitalization, extra spaces and punctuation around words. C1-C8 are display labels; type only the name. Exam explanations are preserved for self-review, not automatically graded.
 
-Question and option order vary. The scenario picker and review list use narrative labels, without revealing the evaluated competency. Each item has one authored strongest fit; some have other reasonable responses that earn real credit and advance the review schedule. A reasonable response does not increment strongest-fit totals or count as missed. Less suitable means less suitable in the stated moment, not a universally wrong coaching behavior. These are study judgments, not validated ICF exam keys or assessment percentages.
+Question and option order vary. Review lists use narrative labels without revealing the evaluated competency. Each item has one authored strongest option; some have other valid approaches that earn credit and advance the review schedule. A valid approach does not increment strongest-option totals or count as missed. Less suitable means less suitable in the stated moment, not a universally wrong coaching behavior. These are study judgments, not validated ICF exam keys or assessment percentages.
 
 ## Run locally
 
@@ -30,7 +32,7 @@ Open `http://127.0.0.1:8847/`. You can also open `index.html` directly, although
 
 ## GitHub Pages
 
-The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the seven runtime files and sharing image into a static artifact and deploys that artifact using GitHub's Pages actions.
+The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the eight runtime files and sharing image into a static artifact and deploys that artifact using GitHub's Pages actions.
 
 Enable GitHub Pages with **GitHub Actions** as the source in the repository's Settings > Pages. The deployment environment records the published URL.
 
@@ -52,6 +54,8 @@ The renderer also accepts `-BrowserPath` for another installed Chromium browser.
 
 Study results, counters, review dates, conversation counts and exam answers stay in `localStorage` under `icf-practice-room-v1`. Theme choices use the separate `icf-study-theme-v1` key. The usage-statistics preference uses `icf-study-usage-opt-out-v1`. Reset progress requires confirmation and leaves theme and privacy choices unchanged.
 
+The same study key now also stores a compatible `practices` field keyed by mode: unfinished name attempts, selected question responses, option order, conversation position and elapsed/answer milliseconds. Each mode keeps its own saved place. Closing pauses general study and answer clocks, but never pauses the exam deadline. The `/coaching/` to `/coachprep/` custom-path migration keeps the same origin and storage keys. The separate `coachprep-coffee-days-v1` key keeps at most three distinct visiting dates plus a dismissal date; no dates leave the browser. Reset study progress does not reset coffee, theme or privacy preferences.
+
 Earlier `q1`-`q8` question records are retained as historical results in all-time counts. The expanded scenarios use new stable IDs and start their own review schedules. Existing recall results and exam drafts are preserved. Older saved records gain a zero-valued reasonable-fit counter when loaded; no storage reset is required.
 
 The exam timer stores a real deadline. Refreshing or returning later does not restart it; expiration saves the answers and opens review. Drafts save while editing. Storage failures are shown in the app, and a text download provides a backup.
@@ -66,7 +70,7 @@ Custom events contain only schema version, event and mode. They contain no visit
 
 Primary source: **2025 ICF Core Competencies**, released September 2025, revision 09.08.25, PDF pp. 3-10. The eight official titles and short definitions are quoted with attribution. Summaries, questions, rationales, fictional dialogue and review examples are original study material. Each question and scenario review identifies its official 2025 sub-competency IDs and PDF page.
 
-Read the official model through the [ICF core competencies resource](https://coachprepfederation.org/credentialing/coachprep-competencies/icf-core-competencies/).
+Read the official model through the [ICF core competencies resource](https://coachingfederation.org/credentialing/coaching-competencies/icf-core-competencies/).
 
 This is independent practice guidance, not an official ICF assessment or endorsement. Counts do not measure PCC competence or certification readiness. Fictional client reactions are examples, not predictions of how a real client will respond.
 

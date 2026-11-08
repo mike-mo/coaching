@@ -18,7 +18,7 @@ window.EXAM = (() => {
   function compareTitle(actual, position, competencies) {
     const expected = competencies[position - 1];
     const entered = normalizeTitle(actual);
-    if (!entered) return {kind:"blank", message:actual.trim() ? "There are no words in this answer." : "You left this title blank."};
+    if (!entered) return {kind:"blank", message:actual.trim() ? "There are no words in this answer." : "You left this name blank."};
     if (entered === normalizeTitle(expected.title)) return {kind:"match", message:"Got it!"};
     const elsewhere = competencies.find(c => normalizeTitle(c.title) === entered);
     if (elsewhere) return {kind:"wrong-slot", message:`That's competency ${elsewhere.id}. This space is for competency ${position}.`};
@@ -58,7 +58,7 @@ window.EXAM = (() => {
     }
     function blanksText(missing) {
       return [
-        missing.titles ? `${missing.titles} title${missing.titles===1?"":"s"}` : "",
+        missing.titles ? `${missing.titles} name${missing.titles===1?"":"s"}` : "",
         missing.bullets ? `${missing.bullets} point${missing.bullets===1?"":"s"}` : ""
       ].filter(Boolean).join(" and ");
     }
@@ -87,7 +87,7 @@ window.EXAM = (() => {
         else onFinished();
       }
       const matches=a.answers.filter((answer,i)=>compareTitle(answer.title,i+1,D.competencies).kind==="match").length;
-      announce(`${status === "expired" ? "Time is up. " : ""}${matches} of 8 titles correct. Review your three points for each competency.`);
+      announce(`${status === "expired" ? "Time is up. " : ""}${matches} of 8 names correct. Review your three points for each competency.`);
     }
     function expire() {
       const a=get();
@@ -119,7 +119,7 @@ window.EXAM = (() => {
         ...(a.deadline ? [`Timer ends: ${new Date(a.deadline).toISOString()}`] : []),"",
         ...a.answers.flatMap((answer,i)=>{
           const named=a.status==="draft"?null:D.competencies.find(c=>normalizeTitle(c.title)===normalizeTitle(answer.title));
-          const title=named?titleLabel(named,answer.title):`C${i+1} · Your title: ${answer.title}`;
+          const title=named?titleLabel(named,answer.title):`C${i+1} · Your name: ${answer.title}`;
           return [`${i+1}. ${title}`,...answer.bullets.map((b,j)=>`  ${j+1}. ${b}`),""];
         })
       ].join("\n");
@@ -142,8 +142,8 @@ window.EXAM = (() => {
       if(element)element.textContent=hasStorageFailure() ? "Not saved. Keep this tab open or save a text copy." : "Saved in this browser.";
     }
     function renderSetup() {
-      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Exam rehearsal</h1><p class="lead">Write all eight titles in order, exactly as ICF names them. For each one, add three points in your own words about what a coach says or does in a session.</p>
-        <section class="card exam-setup"><p>Type the titles without their C numbers. Choose a two-hour timer, or practice at your own pace.</p>
+      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Exam rehearsal</h1><p class="lead">Write all eight names in order, exactly as ICF names them. For each one, add three points in your own words about what a coach says or does in a session.</p>
+        <section class="card exam-setup"><p>Type the names without their C numbers. Choose a two-hour timer, or practice at your own pace.</p>
         <fieldset class="exam-mode"><legend>Use a timer?</legend><label><input type="radio" name="exam-mode" value="untimed" checked> No timer</label><label><input type="radio" name="exam-mode" value="timed"> Two-hour timer</label></fieldset>
         <p class="muted">The timer keeps running if you leave or refresh. At two hours, your answers open for review. Start another rehearsal for a new timer.</p>
         <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
@@ -160,12 +160,12 @@ window.EXAM = (() => {
       document.querySelector("#exam-home").onclick=home;
     }
     function renderDraft(a) {
-      main.innerHTML=`<p class="eyebrow">Rehearsal ${a.mode === "timed" ? "with a two-hour timer" : "without a timer"}</p><h1>Write from memory.</h1><p class="lead">Eight titles in order, with three points for each about what a coach does in a session. Use your own words for the points.</p>
+      main.innerHTML=`<p class="eyebrow">Rehearsal ${a.mode === "timed" ? "with a two-hour timer" : "without a timer"}</p><h1>Write from memory.</h1><p class="lead">Eight names in order, with three points for each about what a coach does in a session. Use your own words for the points.</p>
         <div class="exam-toolbar"><span id="exam-save"></span>${a.mode === "timed" ? '<span class="exam-clock">Time remaining <strong id="exam-time" role="timer" aria-live="off"></strong></span>' : "<span>No time limit</span>"}</div>
         <p class="muted">Change any answer before you finish. Your draft saves as you type; you can leave and come back to it. Use fictional examples and leave out client details.</p>
         <nav class="exam-jumps" aria-label="Go to a numbered competency">${a.answers.map((_,i)=>`<a href="#exam-slot-${i+1}" aria-label="Go to C${i+1}">C${i+1}</a>`).join("")}</nav>
         <form id="exam-form">${a.answers.map((answer,i)=>`<fieldset class="card exam-slot" id="exam-slot-${i+1}"><legend>C${i+1}</legend>
-          <label for="exam-title-${i+1}">Title for C${i+1}</label><input id="exam-title-${i+1}" data-exam-slot="${i}" data-exam-field="title" value="${escape(answer.title)}" autocomplete="off" spellcheck="false">
+          <label for="exam-title-${i+1}">Name for C${i+1}</label><input id="exam-title-${i+1}" data-exam-slot="${i}" data-exam-field="title" value="${escape(answer.title)}" autocomplete="off" spellcheck="false">
           ${answer.bullets.map((bullet,j)=>`<label for="exam-bullet-${i+1}-${j+1}">Point ${j+1}</label><textarea id="exam-bullet-${i+1}-${j+1}" data-exam-slot="${i}" data-exam-field="${j}" rows="3">${escape(bullet)}</textarea>`).join("")}
           </fieldset>`).join("")}<div class="actions"><button class="primary" type="submit">Finish rehearsal</button><button id="exam-download" type="button">Save a text copy</button><button id="exam-discard" type="button">Discard draft</button><button id="exam-home" type="button">Back to home</button></div></form>`;
       document.querySelectorAll("[data-exam-slot]").forEach(input=>{
@@ -202,22 +202,22 @@ window.EXAM = (() => {
       const checks=a.answers.map((answer,i)=>compareTitle(answer.title,i+1,D.competencies));
       const matches=checks.filter(c=>c.kind==="match").length;
       const missing=incomplete(a);
-      main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your title results"}</h1>
-        <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Title results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 titles correct</p><p class="exam-score-description">Exact titles in the right numbered positions.</p></div></section>
-        <p class="lead">Titles are checked automatically. Review your three points for each competency below.</p>
+      main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your name results"}</h1>
+        <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Name results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 names correct</p><p class="exam-score-description">Exact names in the right numbered positions.</p></div></section>
+        <p class="lead">Names are checked automatically. Review your three points for each competency below.</p>
         ${missing.titles || missing.bullets ? `<p>${blanksText(missing)} ${missing.titles+missing.bullets===1?"was":"were"} left blank.</p>` : ""}
         <section class="feedback"><h2>Review your three points</h2><p>Check each point: is it something a coach would say or do? Does it fit this competency? Have you made three different points?</p><p>Use the definitions and examples to check your answers. Some competencies also cover a coach's learning and work outside sessions.</p></section>
-        <p class="muted">Capital letters, extra spaces and punctuation around words don't affect the title check.</p>
+        <p class="muted">Capital letters, extra spaces and punctuation around words don't affect the name check.</p>
         <div id="exam-save" class="muted"></div>
         ${a.answers.map((answer,i)=>{
           const c=D.competencies[i], check=checks[i];
           const named=D.competencies.find(c=>normalizeTitle(c.title)===normalizeTitle(answer.title));
           const submittedTitle=named?titleLabel(named,answer.title):answer.title;
-          return `<section class="card exam-review-slot"><div class="card-head"><span>C${i+1}</span>${check.kind==="match"?"":`<span class="pill">${check.kind==="wrong-slot"?"Right title, wrong place":check.kind==="blank"?"Left blank":"Check the wording"}</span>`}</div>
-            <p class="definition-label">Official title</p><h2>${escape(titleLabel(c))}</h2><p><strong>Your title:</strong> <span class="submitted-answer">${escape(submittedTitle) || "(blank)"}</span></p>
+          return `<section class="card exam-review-slot"><div class="card-head"><span>C${i+1}</span>${check.kind==="match"?"":`<span class="pill">${check.kind==="wrong-slot"?"Right name, wrong place":check.kind==="blank"?"Left blank":"Check the wording"}</span>`}</div>
+            <p class="definition-label">Official name</p><h2>${escape(titleLabel(c))}</h2><p><strong>Your name:</strong> <span class="submitted-answer">${escape(submittedTitle) || "(blank)"}</span></p>
             <p class="exam-title-check ${check.kind==="match"?"got-it":""}">${check.kind==="match"?`${checkIcon}<strong>${escape(check.message)}</strong>`:escape(check.message)}</p><p class="definition-label">Official definition</p><blockquote class="competency-definition">"${escape(c.definition)}"</blockquote>
             <h3>Your three points</h3><ol class="submitted-bullets">${answer.bullets.map(b=>`<li class="submitted-answer">${b.trim()?escape(b):"<span class='muted'>Left blank</span>"}</li>`).join("")}</ol>
-            <details><summary>Examples of what a coach might do</summary><ul class="exam-examples">${D.examExamples[c.id].map(e=>`<li>${escape(e.text)} <small>Official ${e.refs.join(", ")}</small></li>`).join("")}</ul></details>
+            <details open><summary>Examples of what a coach might do</summary><ul class="exam-examples">${D.examExamples[c.id].map(e=>`<li>${escape(e.text)} <small>Official ${e.refs.join(", ")}</small></li>`).join("")}</ul></details>
             ${citation(c.id,[...new Set(D.examExamples[c.id].flatMap(e=>e.refs))])}
           </section>`;
         }).join("")}
@@ -237,6 +237,7 @@ window.EXAM = (() => {
       if(!current)renderSetup();
       else if(current.status==="draft")renderDraft(current);
       else renderReview(current);
+      options.onRender?.();
     }
     setInterval(()=>{if(!expire())timer();},1000);
     document.addEventListener("visibilitychange",()=>{if(!document.hidden){expire();timer();}});
@@ -246,5 +247,5 @@ window.EXAM = (() => {
     });
     return {render,expire,reset:()=>{pendingAction=null;if(dialog.open)dialog.close();}};
   }
-  return {normalizeTitle,titleLabel,validAttempt,compareTitle,create};
+  return {uiVersion:8,normalizeTitle,titleLabel,validAttempt,compareTitle,create};
 })();
