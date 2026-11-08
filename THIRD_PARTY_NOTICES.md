@@ -10,10 +10,6 @@ These quotations are identified in the app and used for study and commentary alo
 
 Copyright and other rights in ICF material remain with their respective owner. This repository does not relicense these quotations or grant use of third-party marks. No open-content license or ICF endorsement is claimed.
 
-## Course task reference
-
-The exam-rehearsal format paraphrases the relevant written-exam task from **Preparing for Graduation-One Month Left!**, course announcement posted November 4, 2026. The original document, private course access details and unrelated announcement text are not included.
-
 ## Other assets
 
 Interface icons are inline original SVGs. Fonts are supplied by the browser or operating system. The app bundles no third-party runtime libraries, images, PDFs, proprietary question banks, recordings or client material.

@@ -50,7 +50,6 @@ window.EXAM = (() => {
     dialog.id = "exam-confirm-dialog";
     dialog.setAttribute("aria-labelledby","exam-confirm-title");
     document.body.append(dialog);
-    const source = () => `<p class="citation">${escape(D.examSource.title)} · ${escape(D.examSource.version)}<br>${escape(D.examSource.section)} · course written-exam requirements.</p>`;
     function incomplete(a) {
       return {
         titles:a.answers.filter(answer => !normalizeTitle(answer.title)).length,
@@ -114,7 +113,7 @@ window.EXAM = (() => {
     }
     function download() {
       const a=get();if(!a)return;
-      const text = ["ICF exam rehearsal",`Timer: ${a.mode === "timed" ? "Two hours" : "No timer"}`,`Status: ${{draft:"In progress",submitted:"Finished",expired:"Time is up"}[a.status]}`,
+      const text = ["Core competency exam rehearsal",`Timer: ${a.mode === "timed" ? "Two hours" : "No timer"}`,`Status: ${{draft:"In progress",submitted:"Finished",expired:"Time is up"}[a.status]}`,
         `Started: ${new Date(a.startedAt).toISOString()}`,
         ...(a.deadline ? [`Timer ends: ${new Date(a.deadline).toISOString()}`] : []),"",
         ...a.answers.flatMap((answer,i)=>{
@@ -142,11 +141,11 @@ window.EXAM = (() => {
       if(element)element.textContent=hasStorageFailure() ? "Not saved. Keep this tab open or save a text copy." : "Saved in this browser.";
     }
     function renderSetup() {
-      main.innerHTML=`<p class="eyebrow">Course written-exam practice</p><h1>Exam rehearsal</h1><p class="lead">Write all eight titles in order, exactly as ICF names them. For each one, add three points in your own words about what a coach says or does in a session.</p>
-        <section class="card exam-setup"><p>Type the titles without their C numbers. The course exam lasts two hours. Choose a timer here, or practice at your own pace.</p>
+      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Exam rehearsal</h1><p class="lead">Write all eight titles in order, exactly as ICF names them. For each one, add three points in your own words about what a coach says or does in a session.</p>
+        <section class="card exam-setup"><p>Type the titles without their C numbers. Choose a two-hour timer, or practice at your own pace.</p>
         <fieldset class="exam-mode"><legend>Use a timer?</legend><label><input type="radio" name="exam-mode" value="untimed" checked> No timer</label><label><input type="radio" name="exam-mode" value="timed"> Two-hour timer</label></fieldset>
         <p class="muted">The timer keeps running if you leave or refresh. At two hours, your answers open for review. Start another rehearsal for a new timer.</p>
-        <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div>${source()}</section>`;
+        <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
       document.querySelector("#exam-start").onclick=()=>{
         if(get())return;
         const mode=document.querySelector('input[name="exam-mode"]:checked').value;
@@ -166,7 +165,7 @@ window.EXAM = (() => {
         <form id="exam-form">${a.answers.map((answer,i)=>`<fieldset class="card exam-slot" id="exam-slot-${i+1}"><legend>C${i+1}</legend>
           <label for="exam-title-${i+1}">Title for C${i+1}</label><input id="exam-title-${i+1}" data-exam-slot="${i}" data-exam-field="title" value="${escape(answer.title)}" autocomplete="off" spellcheck="false">
           ${answer.bullets.map((bullet,j)=>`<label for="exam-bullet-${i+1}-${j+1}">Point ${j+1}</label><textarea id="exam-bullet-${i+1}-${j+1}" data-exam-slot="${i}" data-exam-field="${j}" rows="3">${escape(bullet)}</textarea>`).join("")}
-          </fieldset>`).join("")}<div class="actions"><button class="primary" type="submit">Finish rehearsal</button><button id="exam-download" type="button">Save a text copy</button><button id="exam-discard" type="button">Discard draft</button><button id="exam-home" type="button">Back to home</button></div></form>${source()}`;
+          </fieldset>`).join("")}<div class="actions"><button class="primary" type="submit">Finish rehearsal</button><button id="exam-download" type="button">Save a text copy</button><button id="exam-discard" type="button">Discard draft</button><button id="exam-home" type="button">Back to home</button></div></form>`;
       document.querySelectorAll("[data-exam-slot]").forEach(input=>{
         input.addEventListener("input",()=>{
           if(expire())return;
@@ -220,7 +219,7 @@ window.EXAM = (() => {
             ${citation(c.id,[...new Set(D.examExamples[c.id].flatMap(e=>e.refs))])}
           </section>`;
         }).join("")}
-        <div class="actions"><button id="exam-download">Save a text copy</button><button class="primary" id="exam-discard">Start another rehearsal</button><button id="exam-home">Back to home</button></div>${source()}`;
+        <div class="actions"><button id="exam-download">Save a text copy</button><button class="primary" id="exam-discard">Start another rehearsal</button><button id="exam-home">Back to home</button></div>`;
       document.querySelector("#exam-download").onclick=download;
       document.querySelector("#exam-discard").onclick=discard;
       document.querySelector("#exam-home").onclick=home;

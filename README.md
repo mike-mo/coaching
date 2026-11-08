@@ -33,15 +33,13 @@ Enable GitHub Pages with **GitHub Actions** as the source in the repository's Se
 
 All app assets use relative URLs. The app works at a GitHub project-site subpath and does not require server-side routing. Navigation stays within the page.
 
-Serving it at a custom path such as `https://smartify.space/coaching/` requires routing on that domain's existing host or reverse proxy. A DNS record or GitHub Pages CNAME cannot route an individual URL path. This repository does not claim the domain or configure its DNS.
-
 ## Saved data
 
 Study results, counters, review dates, conversation counts and exam answers stay in `localStorage` under `icf-practice-room-v1`. Theme choices use the separate `icf-study-theme-v1` key. Reset progress requires confirmation and leaves the theme choice unchanged.
 
 The exam timer stores a real deadline. Refreshing or returning later does not restart it; expiration saves the answers and opens review. Drafts save while editing. Storage failures are shown in the app, and a text download provides a backup.
 
-Storage is specific to the browser profile and origin, not synced between devices. Moving from localhost to GitHub Pages starts a separate history; the app does not migrate answers automatically. Clearing site data or using private browsing may remove saved work. Use fictional examples in rehearsal.
+Storage is specific to the browser profile and origin, not synced between devices. Clearing site data or using private browsing may remove saved work. Use fictional examples in rehearsal.
 
 The app has no analytics, login, AI service, external runtime scripts or tracking widget. Opening the official source or optional coffee link visits an external site in a new tab.
 
@@ -50,10 +48,6 @@ The app has no analytics, login, AI service, external runtime scripts or trackin
 Primary source: **2025 ICF Core Competencies**, released September 2025, revision 09.08.25, PDF pp. 3-10. The eight official titles and short definitions are quoted with attribution. Summaries, questions, rationales, fictional dialogue and review examples are original study material. Each question and scenario review identifies its official 2025 sub-competency IDs and PDF page.
 
 Read the official model through the [ICF core competencies resource](https://coachingfederation.org/credentialing/coaching-competencies/icf-core-competencies/).
-
-Exam format reference: **Preparing for Graduation-One Month Left!**, course announcement posted November 4, 2026, Written Exam section. The relevant task is paraphrased: write the eight titles in order and three points in your own words for each. Official descriptions need not be memorized. The course allows two hours; this app also offers untimed rehearsal. The original announcement and unrelated course details are not distributed.
-
-Official 2025 numbers, such as `3.06`, are not interchangeable with course Feedforward/PCC-style markers such as `3.1`.
 
 This is independent practice guidance, not an official ICF assessment or endorsement. Counts do not measure PCC competence or certification readiness. Fictional client reactions are examples, not predictions of how a real client will respond.
 

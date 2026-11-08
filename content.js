@@ -12,11 +12,6 @@ window.STUDY = {
     {id:7, title:"Evokes Awareness", definition:"Facilitates client insight and learning by using tools and techniques such as powerful questioning, silence, metaphor or analogy", group:"Communicating effectively", summary:"Help the client explore their thinking and see things differently. Share what you notice without insisting that you're right."},
     {id:8, title:"Facilitates Client Growth", definition:"Partners with the client to transform learning and insight into action. Promotes client autonomy in the coaching process.", group:"Cultivating learning and growth", summary:"Help the client use what they've learned and choose their own next steps. Ask what support they want and how they'll follow through."}
   ],
-  examSource: {
-    title:"Preparing for Graduation-One Month Left!",
-    version:"Course announcement · posted November 4, 2026",
-    section:"Written Exam section"
-  },
   examExamples: {
     1:[
       {text:"When a sponsor asks what the client discussed, the coach checks the confidentiality agreement and relevant legal limits before sharing anything.",refs:["1.05"]},
