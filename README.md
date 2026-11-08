@@ -41,7 +41,7 @@ Open `http://127.0.0.1:8847/`. Use the local server so SVG masks and browser sto
 
 ## GitHub Pages
 
-The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the eight runtime files, sharing image and selected logo SVG into a static artifact and deploys that artifact using GitHub's Pages actions.
+The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the eight runtime files, sharing image, selected logo and favicon SVGs into a static artifact and deploys that artifact using GitHub's Pages actions.
 
 Enable GitHub Pages with **GitHub Actions** as the source in the repository's Settings > Pages. The deployment environment records the published URL.
 
@@ -49,11 +49,13 @@ All app assets use relative URLs. The app works at a GitHub project-site subpath
 
 ## Site logo
 
-The header, exercise introductions and home orbit use `assets/coachprep-logo.svg`, the selected compact diagonal Twin C mark. A CSS mask applies the existing theme color while preserving the SVG's geometry and aspect ratio. The wordmark, favicon and sharing image stay separate.
+The header, exercise introductions and home orbit use `assets/coachprep-logo.svg`, the selected compact diagonal Twin C mark. A CSS mask applies the existing theme color while preserving the SVG's geometry and aspect ratio. The favicon and sharing image use the same exact path and viewBox. The transparent SVG favicon switches color for light or dark browser chrome.
+
+Sources & about keeps attribution, educational/noncommercial purpose, assessment limitations and truthful storage/analytics disclosures alongside theme and opt-out controls. Its X stays visible while the content scrolls; X and Escape return focus to the opening button. The informational caveats do not promise legal protection or create a new repository license.
 
 ## Sharing image
 
-The initial HTML includes a canonical URL, Open Graph metadata and a Twitter large-image card. The original 1200x630 PNG is `assets/share-card.png`; edit `assets/share-card.svg` to change the design.
+The initial HTML includes a canonical URL, Open Graph metadata and a Twitter large-image card. The 1200x630 PNG is `assets/share-card.png`; edit `assets/share-card.svg` to change the design. Metadata uses a versioned PNG URL so the refreshed logo does not depend on an older image cache.
 
 On Windows with Edge installed, regenerate the PNG from the repository root:
 

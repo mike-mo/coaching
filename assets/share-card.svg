@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
-  <title id="title">ICF core competency practice</title>
-  <desc id="description">Practice the names and explore coaching choices. An eight-competency clock has C8 at the top and C1 at the upper right.</desc>
+  <title id="title">Coachprep: ICF core competency practice</title>
+  <desc id="description">Coachprep's Twin C logo beside an eight-competency clock, C8 at the top and C1 at the upper right.</desc>
   <rect width="1200" height="630" fill="#faf8f2"/>
-  <rect x="72" y="64" width="56" height="56" rx="16" fill="#183f38"/>
-  <text x="100" y="104" text-anchor="middle" font-family="Georgia, serif" font-size="38" font-weight="700" fill="#ffffff">8</text>
+  <svg x="72" y="64" width="56" height="56" viewBox="0 0 256 256" fill="#183f38">
+    <path d="M180.28 122.39 A80 56 0 1 0 167 128.90 L144.63 106.53 A52 28 0 1 1 159.98 102.08 Z M167 127.10 A80 56 0 1 0 180.28 133.61 L159.98 153.92 A52 28 0 1 1 144.63 149.47 Z"/>
+  </svg>
   <text x="146" y="100" font-family="Arial, sans-serif" font-size="25" font-weight="600" fill="#183f38">Coachprep</text>
   <text x="72" y="238" font-family="Georgia, serif" font-size="70" font-weight="700" fill="#203e35">
     <tspan x="72">ICF core</tspan>
@@ -13,7 +14,9 @@
   <text x="76" y="440" font-family="Arial, sans-serif" font-size="29" fill="#47665d">Explore coaching choices.</text>
   <g font-family="Arial, sans-serif" font-size="19" text-anchor="middle" fill="#183f38">
     <circle cx="960" cy="300" r="166" fill="#f1f2e9" stroke="#c8d6c5" stroke-width="2"/>
-    <text x="960" y="330" font-family="Georgia, serif" font-size="92" font-weight="700" fill="#47665d">8</text>
+    <svg x="892" y="232" width="136" height="136" viewBox="0 0 256 256" fill="#47665d">
+      <path d="M180.28 122.39 A80 56 0 1 0 167 128.90 L144.63 106.53 A52 28 0 1 1 159.98 102.08 Z M167 127.10 A80 56 0 1 0 180.28 133.61 L159.98 153.92 A52 28 0 1 1 144.63 149.47 Z"/>
+    </svg>
     <g data-competency="8">
       <circle cx="960" cy="158" r="23" fill="#faf8f2" stroke="#c8d6c5"/>
       <text x="960" y="165">C8</text>

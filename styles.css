@@ -83,6 +83,14 @@ dialog::backdrop{background:var(--backdrop)}
 .orbit strong.coachprep-logo{width:100px;height:100px}
 @media(max-width:850px){.orbit strong.coachprep-logo{width:84px;height:84px}}
 @media(max-width:540px){.orbit strong.coachprep-logo{width:76px;height:76px}}
+#about-dialog{padding:0}
+#about-dialog[open]{display:grid;grid-template-rows:auto minmax(0,1fr);max-height:88dvh}
+#about-dialog .dialog-head{flex-direction:row;align-items:center;padding:20px 24px;border-bottom:1px solid var(--line)}
+#about-title{margin:0;min-width:0}
+#close-about{display:grid;place-items:center;width:48px;height:48px;flex-shrink:0;padding:10px;font-size:26px;line-height:1}
+.about-body{overflow:auto;overscroll-behavior:contain;padding:24px}
+.about-body .field{margin-block:20px}
+.about-body .field:last-child{margin-bottom:0}
 .masthead{flex-wrap:wrap}
 .header-actions{display:flex;gap:6px;align-items:center;margin-left:auto}
 .theme-toggle{display:grid;place-items:center;padding:10px;min-width:48px;width:48px;height:48px}

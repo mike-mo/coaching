@@ -32,6 +32,7 @@ jobs:
           mkdir _site/assets
           cp assets/share-card.png _site/assets/
           cp assets/coachprep-logo.svg _site/assets/
+          cp assets/favicon.svg _site/assets/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

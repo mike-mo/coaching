@@ -8,9 +8,12 @@
   document.querySelector('[data-view="scenario"]')?.remove();
   const oldPrivacy=[...document.querySelectorAll("#about-dialog p")].find(p=>p.textContent.includes("doesn't save what you type") || p.textContent.includes("optional deadline"));
   if(oldPrivacy){
-    oldPrivacy.textContent="Your saved work stays in this browser. It includes practice counts, review dates and paused sessions, including typed name attempts, selected responses and answer times. Exam rehearsal saves your current answers, elapsed time and previous completed pass for optional self-evaluation. There is no login or AI, and nothing syncs between devices. Private browsing or clearing site data can erase your progress. Use invented examples and save an exam text copy for a backup.";
-    const note=document.createElement("p");note.textContent="Question practice scores use 90 points for the strongest option, 80 for a valid approach, and zero for a less suitable response, plus up to 14 accepted-response speed points capped through 4 seconds and tapering to zero at 60 seconds. Earlier saved scores keep their original bonus. Feedback and time away are excluded. The coffee reminder appears below closing results from the third distinct local visiting day; Not now suppresses it for that day. At most three visiting dates and the dismissal date stay locally, never in usage stats.";oldPrivacy.after(note);
+    oldPrivacy.textContent="Your study progress and exam answers stay in this browser and do not sync. Clearing browser data can erase them. Use fictional examples in your answers.";
   }
+  document.querySelectorAll("#about-dialog p").forEach(p=>{if(p.textContent.includes("footer coffee link") || p.textContent.includes("third distinct local visiting day"))p.remove();});
+  const coffeeLink=document.querySelector("#coffee-link");
+  coffeeLink.textContent="Would you treat me to a coffee?";
+  coffeeLink.setAttribute("aria-label","Would you treat me to a coffee? (opens a new tab)");
   if(!document.querySelector("#coffee-warning")){
     const message=document.createElement("p");message.id="coffee-warning";message.className="warning";message.setAttribute("role","alert");message.hidden=true;document.querySelector("main").before(message);
   }
@@ -319,12 +322,14 @@
   window.visualViewport?.addEventListener("resize",viewportSize);
   window.visualViewport?.addEventListener("scroll",viewportSize);viewportSize();
   dialog.addEventListener("cancel",event=>{event.preventDefault();closeStudy();});
-  dialog.addEventListener("keydown",event=>{
-    if(event.key!=="Tab" || document.activeElement.closest("dialog")!==dialog)return;
-    const controls=[...dialog.querySelectorAll("button:not([disabled]),input,textarea,select,summary,a[href]")].filter(e=>e.getClientRects().length);
+  function trapDialogFocus(event){
+    const owner=event.currentTarget;
+    if(event.key!=="Tab" || document.activeElement.closest("dialog")!==owner)return;
+    const controls=[...owner.querySelectorAll("button:not([disabled]),input,textarea,select,summary,a[href]")].filter(e=>e.getClientRects().length);
     const first=controls[0],last=controls.at(-1);
     if(event.shiftKey&&document.activeElement===first || !event.shiftKey&&document.activeElement===last){event.preventDefault();(event.shiftKey?last:first)?.focus();}
-  });
+  }
+  dialog.addEventListener("keydown",trapDialogFocus);
   setInterval(()=>{if(dialog.open && flow){const time=document.querySelector("#practice-time");if(time)time.textContent=P.duration(elapsed());persist();}},1000);
   window.addEventListener("pagehide",()=>{if(dialog.open){pause();persist();}});
   window.addEventListener("beforeunload",event=>{if(dialog.open && !persist()){event.preventDefault();event.returnValue="";}});
@@ -685,8 +690,16 @@
   }
   document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>navigate(b.dataset.view));
   document.querySelector("#brand").onclick=e=>{e.preventDefault();navigate("home");};
-  document.querySelector("#about-button").onclick=()=>document.querySelector("#about-dialog").showModal();
-  document.querySelector("#close-about").onclick=()=>document.querySelector("#about-dialog").close();
+  const about=document.querySelector("#about-dialog"),closeAbout=document.querySelector("#close-about");
+  if(!about.querySelector(".about-body")){
+    const body=document.createElement("div");body.className="about-body";
+    [...about.children].filter(e=>!e.classList.contains("dialog-head")).forEach(e=>body.append(e));about.append(body);
+  }
+  if(closeAbout.textContent.trim()==="Close")closeAbout.textContent="×";
+  document.querySelector("#about-button").onclick=()=>{about.showModal();closeAbout.focus();};
+  closeAbout.onclick=()=>about.close();
+  about.addEventListener("keydown",trapDialogFocus);
+  about.addEventListener("close",()=>document.querySelector("#about-button").focus({preventScroll:true}));
   document.querySelector("#cancel-reset").onclick=()=>document.querySelector("#reset-dialog").close();
   document.querySelector("#confirm-reset").onclick=()=>{
     try {localStorage.removeItem(KEY);lastStored=null;state=empty();saveFailed=false;exam.reset();warning.hidden=true;document.querySelector("#reset-dialog").close();navigate("home");announce("Study progress and rehearsal deleted.");}
@@ -702,7 +715,7 @@
     ["practice.js?v=4",window.PRACTICE?.uiVersion===4],
     ["exam.js?v=13",window.EXAM?.uiVersion===13],
     ["content.js?v=11",window.STUDY?.uiVersion===11],
-    ["styles.css?v=18",!!document.querySelector('link[href="styles.css?v=18"]')]
+    ["styles.css?v=19",!!document.querySelector('link[href="styles.css?v=19"]')]
   ].filter(([,ready])=>!ready);
   if(!assets.length)start();
   else Promise.all(assets.map(([source])=>new Promise((resolve,reject)=>{
