@@ -44,7 +44,7 @@ First enable Analytics Engine from **Workers & Pages > Analytics Engine** in the
 
 | Binding | Configuration |
 | --- | --- |
-| `COACHING_USAGE` | Analytics Engine dataset `coaching_usage` |
+| `COACHING_ENGINE` | Analytics Engine dataset `coaching_events` |
 | `COACHING_USAGE_LIMIT` | Rate Limiting binding, a new account-unique integer namespace, limit `100`, period `60` |
 
 The limiter uses the constant key `coaching-usage`, shared across this endpoint's visitors. It uses no IP, user identifier or fingerprint. Limits are approximate per Cloudflare location, not a strict worldwide quota. Busy requests return 429 and the browser does not retry them. Verify binding availability on the existing Free plan before deployment; do not upgrade if unavailable. Analytics Engine's documented Free limits are 100,000 points and 10,000 reads per day, with three-month retention. Monitor quotas rather than assuming unlimited capacity.
@@ -79,7 +79,7 @@ Most frequently started modes in the past seven days:
 
 ```sql
 SELECT blob2 AS mode, SUM(_sample_interval * double1) AS starts
-FROM coaching_usage
+FROM coaching_events
 WHERE blob1 = 'start' AND blob3 = '1'
   AND timestamp >= NOW() - INTERVAL '7' DAY
 GROUP BY mode
@@ -92,7 +92,7 @@ Starts and completions by UTC day and mode:
 SELECT intDiv(toUInt32(timestamp), 86400) * 86400 AS utc_day,
        blob2 AS mode, blob1 AS event,
        SUM(_sample_interval * double1) AS events
-FROM coaching_usage
+FROM coaching_events
 WHERE blob3 = '1' AND timestamp >= NOW() - INTERVAL '30' DAY
 GROUP BY utc_day, mode, event
 ORDER BY utc_day, mode, event

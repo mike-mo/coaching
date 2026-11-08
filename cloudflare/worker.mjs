@@ -56,14 +56,14 @@ async function collectUsage(request, env) {
       event.version !== 1 || !["start", "completion"].includes(event.event) || !usageModes.includes(event.mode)) {
     return usageResponse("The usage event has unsupported fields or values.", 400);
   }
-  if (typeof env?.COACHING_USAGE?.writeDataPoint !== "function" || typeof env?.COACHING_USAGE_LIMIT?.limit !== "function") {
+  if (typeof env?.COACHING_ENGINE?.writeDataPoint !== "function" || typeof env?.COACHING_USAGE_LIMIT?.limit !== "function") {
     console.error("Study usage binding is unavailable.");
     return usageResponse("Usage statistics are unavailable.", 503);
   }
   try {
     const { success } = await env.COACHING_USAGE_LIMIT.limit({ key: "coaching-usage" });
     if (!success) return usageResponse("Usage statistics are temporarily busy.", 429, { "Retry-After": "60" });
-    env.COACHING_USAGE.writeDataPoint({
+    env.COACHING_ENGINE.writeDataPoint({
       indexes: [`${event.event}:${event.mode}`],
       blobs: [event.event, event.mode, "1"],
       doubles: [1]

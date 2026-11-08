@@ -11,7 +11,7 @@ const request = (body = event, options = {}) => new Request(endpoint, {
 });
 function binding(points = []) {
   return {
-    COACHING_USAGE: { writeDataPoint: point => points.push(point) },
+    COACHING_ENGINE: { writeDataPoint: point => points.push(point) },
     COACHING_USAGE_LIMIT: { limit: async input => {
       assert.deepEqual(input, { key: "coaching-usage" });
       return { success: true };
@@ -100,8 +100,8 @@ test("body limit is exactly 256 UTF-8 bytes, including chunked bodies", async ()
 
 test("missing or failing bindings return 503 and log no payload or client data", async t => {
   const logs = t.mock.method(console, "error", () => {});
-  for (const env of [undefined, {}, { COACHING_USAGE: {} }, {
-    ...binding(), COACHING_USAGE: { writeDataPoint() { throw new Error("private server details"); } }
+  for (const env of [undefined, {}, { COACHING_ENGINE: {} }, {
+    ...binding(), COACHING_ENGINE: { writeDataPoint() { throw new Error("private server details"); } }
   }, {
     ...binding(), COACHING_USAGE_LIMIT: { async limit() { throw new Error("private server details"); } }
   }]) {
