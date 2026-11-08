@@ -225,6 +225,7 @@ window.EXAM = (() => {
       main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your name results"}</h1>
         <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Name results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 names correct</p><p class="exam-score-description">Exact names in the right numbered positions.</p></div></section>
         <p class="lead">Names are checked automatically. Review your three points for each competency below.</p>
+        ${comparison(a)}
         ${missing.titles || missing.bullets ? `<p>${blanksText(missing)} ${missing.titles+missing.bullets===1?"was":"were"} left blank.</p>` : ""}
         <section class="feedback"><h2>Review your three points</h2><p>Check each point: is it something a coach would say or do? Does it fit this competency? Have you made three different points?</p><p>Use the definitions and examples to check your answers. Some competencies also cover a coach's learning and work outside sessions.</p></section>
         <p class="muted">Capital letters, extra spaces and punctuation around words don't affect the name check.</p>
@@ -241,7 +242,7 @@ window.EXAM = (() => {
             ${citation(c.id,[...new Set(D.examExamples[c.id].flatMap(e=>e.refs))])}
           </section>`;
         }).join("")}
-        ${comparison(a)}<div class="actions"><button id="exam-download">Save a text copy</button><button class="primary" id="exam-discard">Start another rehearsal</button><button id="exam-home">Back to home</button></div>`;
+        <div class="actions"><button id="exam-download">Save a text copy</button><button class="primary" id="exam-discard">Start another rehearsal</button><button id="exam-home">Back to home</button></div>`;
       document.querySelector("#exam-download").onclick=download;
       document.querySelector("#exam-discard").onclick=discard;
       document.querySelector("#exam-home").onclick=home;
@@ -262,5 +263,5 @@ window.EXAM = (() => {
     });
     return {render,reset:()=>{pendingAction=null;if(dialog.open)dialog.close();}};
   }
-  return {uiVersion:9,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
+  return {uiVersion:10,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
 })();

@@ -531,7 +531,7 @@
   const base=document.currentScript?.src || location.href;
   const assets=[
     ["practice.js?v=1",!!window.PRACTICE],
-    ["exam.js?v=9",window.EXAM?.uiVersion===9],
+    ["exam.js?v=10",window.EXAM?.uiVersion===10],
     ["content.js?v=8",!!window.STUDY?.subcompetencies],
     ["styles.css?v=15",!!document.querySelector('link[href="styles.css?v=15"]')]
   ].filter(([,ready])=>!ready);
