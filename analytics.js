@@ -15,25 +15,30 @@
     console.error("Usage preference controls are unavailable.");
     return;
   }
-  try {
-    const saved = localStorage.getItem(key);
-    if (saved !== null && !["0", "1"].includes(saved)) throw new Error("Invalid usage preference");
-    optedOut = saved === "1";
-  } catch {
-    optedOut = true;
-    preferenceFailed = true;
-    console.warn("Usage preference could not be read. Statistics are off.");
+  function readPreference() {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved !== null && !["0", "1"].includes(saved)) throw new Error("Invalid usage preference");
+      optedOut = saved === "1";
+      preferenceFailed = false;
+    } catch {
+      optedOut = true;
+      preferenceFailed = true;
+      console.warn("Usage preference could not be read. Statistics are off.");
+    }
   }
+  readPreference();
   const allowed = () => production && !privateSignal() && !optedOut && !preferenceFailed;
   function updateStatus() {
     toggle.checked = !allowed();
     toggle.disabled = !production || privateSignal();
-    status.textContent = !production ? "Usage stats are off at this address." :
-      privateSignal() ? "Usage stats are off because this browser sends Do Not Track or Global Privacy Control." :
+    const message = !production ? "Usage stats are off at this address." :
+      privateSignal() ? `Study counts are off because this browser sends Do Not Track or Global Privacy Control.${beaconLoaded ? " Reload when convenient to stop page analytics started in this tab." : ""}` :
       preferenceFailed ? "Your usage preference could not be saved or read. Usage stats are off." :
-      optedOut ? beaconLoaded ? "Study counts are off now. Reload when convenient to stop the already-loaded page analytics." : "Usage stats are off in this browser." :
+      optedOut ? beaconLoaded ? "Study counts are off now. Reload when convenient to stop page analytics started in this tab." : "Usage stats are off in this browser." :
       beaconFailed || deliveryFailed ? "Some usage stats could not be sent. Studying and saved work are unaffected." :
       "Usage stats are on. You can turn them off here.";
+    if (status.textContent !== message) status.textContent = message;
   }
   function loadBeacon() {
     if (!allowed() || beaconLoaded) return;
@@ -52,7 +57,7 @@
     document.head.append(script);
   }
   function send(event, mode) {
-    if (!allowed()) return;
+    if (!allowed()) { updateStatus(); return; }
     void fetch(`${origin}/coaching/analytics`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -111,6 +116,12 @@
     updateStatus();
     loadBeacon();
   };
+  window.addEventListener("storage", event => {
+    if (event.key !== key && event.key !== null) return;
+    readPreference();
+    updateStatus();
+    loadBeacon();
+  });
   updateStatus();
   loadBeacon();
 })();

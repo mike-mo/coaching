@@ -20,6 +20,8 @@ function browser(options = {}) {
       createElement: () => ({ setAttribute(name, value) { this[name] = value; } }),
       head: { append: script => scripts.push(script) }
     },
+    events: {},
+    addEventListener(name, handler) { this.events[name] = handler; },
     fetch: (url, init) => { requests.push({ url, init }); return options.offline ? Promise.reject(new Error("Unavailable")) :
       Promise.resolve({ status: options.status || 204 }); }
   };
@@ -125,4 +127,19 @@ test("outage never throws into study lifecycle, retries, or logs personal data",
   assert.match(b.status.textContent, /unaffected/);
   b.scripts[0].onerror();
   assert.match(b.status.textContent, /could not be sent/);
+});
+
+test("another tab's opt-out stops counts in this tab without clearing learning data or loading another beacon", () => {
+  const b = browser({ storage: { "icf-practice-room-v1": "private" } });
+  b.usage.begin("questions");
+  b.values.set(key, "1");
+  b.context.events.storage({ key });
+  b.usage.complete("questions");
+  assert.equal(b.requests.length, 1);
+  assert.equal(b.toggle.checked, true);
+  assert.match(b.status.textContent, /Reload/);
+  assert.equal(b.values.get("icf-practice-room-v1"), "private");
+  b.context.events.storage({ key: "icf-practice-room-v1" });
+  assert.equal(b.toggle.checked, true);
+  assert.equal(b.scripts.length, 1);
 });
