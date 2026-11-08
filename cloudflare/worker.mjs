@@ -1,6 +1,7 @@
 const upstreamOrigin = "https://mike-mo.github.io";
 const safeHeaders = ["accept", "if-none-match", "if-modified-since", "range", "if-range"];
-const isCoachingPath = path => path === "/coaching" || path.startsWith("/coaching/");
+const isCoachingPath = path => path === "/coachprep" || path.startsWith("/coachprep/");
+const isLegacyPath = path => path === "/coaching" || path.startsWith("/coaching/");
 const usageOrigin = "https://smartify.space";
 const usageModes = ["titles", "questions", "mixed", "conversation", "exam"];
 const maximumUsageBytes = 256;
@@ -78,8 +79,8 @@ async function collectUsage(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!isCoachingPath(url.pathname)) return fetch(request);
-    if (url.pathname === "/coaching/analytics") return collectUsage(request, env);
+    if (!isCoachingPath(url.pathname) && !isLegacyPath(url.pathname)) return fetch(request);
+    if (url.pathname === "/coachprep/analytics" || url.pathname === "/coaching/analytics") return collectUsage(request, env);
 
     if (request.method !== "GET" && request.method !== "HEAD") {
       return new Response("This study site supports GET and HEAD requests only.", {
@@ -88,9 +89,15 @@ export default {
       });
     }
 
-    if (url.protocol !== "https:" || url.pathname === "/coaching") {
+    if (isLegacyPath(url.pathname)) {
       url.protocol = "https:";
-      if (url.pathname === "/coaching") url.pathname = "/coaching/";
+      url.pathname = "/coachprep" + url.pathname.slice("/coaching".length);
+      if (url.pathname === "/coachprep") url.pathname += "/";
+      return Response.redirect(url.href, 308);
+    }
+    if (url.protocol !== "https:" || url.pathname === "/coachprep") {
+      url.protocol = "https:";
+      if (url.pathname === "/coachprep") url.pathname = "/coachprep/";
       return Response.redirect(url.href, 308);
     }
 

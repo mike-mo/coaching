@@ -58,7 +58,7 @@ The exam timer stores a real deadline. Refreshing or returning later does not re
 
 Storage is specific to the browser profile and origin, not synced between devices. Clearing site data or using private browsing may remove saved work. Use fictional examples in rehearsal.
 
-The local and GitHub Pages versions use no analytics or external runtime scripts. On `https://smartify.space/coaching/`, an intentional Cloudflare Web Analytics beacon provides basic page metrics, and a first-party collector counts study-mode starts and completions once its service and bindings are enabled. Neither is required to study. Do Not Track, Global Privacy Control and the saved Sources & about opt-out disable usage statistics. The saved opt-out also stops new study events in other open tabs. If the beacon load has already started, the Sources message explains that a later reload stops page analytics too.
+The local and GitHub Pages versions use no analytics or external runtime scripts. On `https://smartify.space/coachprep/`, an intentional Cloudflare Web Analytics beacon provides basic page metrics, and a first-party collector counts study-mode starts and completions once its service and bindings are enabled. Neither is required to study. Do Not Track, Global Privacy Control and the saved Sources & about opt-out disable usage statistics. The saved opt-out also stops new study events in other open tabs. If the beacon load has already started, the Sources message explains that a later reload stops page analytics too.
 
 Custom events contain only schema version, event and mode. They contain no visitor identifiers, cookies, IP addresses, referrers, query strings, answers, scores, competency details or draft text. Counts are events, not unique people. See [Cloudflare deployment and analytics](cloudflare/README.md) for setup, lifecycle definitions and authenticated aggregate queries. There is no public analytics query endpoint, login or AI service. Opening the official source or optional coffee link visits an external site in a new tab.
 
@@ -66,7 +66,7 @@ Custom events contain only schema version, event and mode. They contain no visit
 
 Primary source: **2025 ICF Core Competencies**, released September 2025, revision 09.08.25, PDF pp. 3-10. The eight official titles and short definitions are quoted with attribution. Summaries, questions, rationales, fictional dialogue and review examples are original study material. Each question and scenario review identifies its official 2025 sub-competency IDs and PDF page.
 
-Read the official model through the [ICF core competencies resource](https://coachingfederation.org/credentialing/coaching-competencies/icf-core-competencies/).
+Read the official model through the [ICF core competencies resource](https://coachprepfederation.org/credentialing/coachprep-competencies/icf-core-competencies/).
 
 This is independent practice guidance, not an official ICF assessment or endorsement. Counts do not measure PCC competence or certification readiness. Fictional client reactions are examples, not predictions of how a real client will respond.
 

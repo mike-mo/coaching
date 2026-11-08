@@ -18,14 +18,14 @@ function meta(attribute, name) {
 test("initial HTML includes unique canonical, Open Graph and Twitter metadata", () => {
   const canonical = html.match(/<link rel="canonical" href="([^"]+)">/g);
   assert.equal(canonical.length, 1);
-  assert.ok(canonical[0].includes("https://smartify.space/coaching/"));
+  assert.ok(canonical[0].includes("https://smartify.space/coachprep/"));
   assert.equal(meta("property", "og:type"), "website");
-  assert.equal(meta("property", "og:url"), "https://smartify.space/coaching/");
+  assert.equal(meta("property", "og:url"), "https://smartify.space/coachprep/");
   assert.equal(meta("property", "og:title"), "ICF core competency practice");
   assert.equal(meta("name", "twitter:card"), "summary_large_image");
   assert.equal(meta("name", "twitter:title"), meta("property", "og:title"));
   assert.equal(meta("name", "twitter:description"), meta("property", "og:description"));
-  assert.equal(meta("property", "og:image"), "https://mike-mo.github.io/coaching/assets/share-card.png");
+  assert.equal(meta("property", "og:image"), "https://mike-mo.github.io/coachprep/assets/share-card.png");
   assert.equal(meta("name", "twitter:image"), meta("property", "og:image"));
   assert.equal(meta("name", "twitter:image:alt"), meta("property", "og:image:alt"));
 });

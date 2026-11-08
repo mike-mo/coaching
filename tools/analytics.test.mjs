@@ -9,7 +9,7 @@ function browser(options = {}) {
   const values = new Map(Object.entries(options.storage || {}));
   const toggle = {}, status = {}, scripts = [], requests = [], logs = [];
   const context = {
-    location: { origin: options.origin || "https://smartify.space", pathname: "/coaching/" },
+    location: { origin: options.origin || "https://smartify.space", pathname: "/coachprep/" },
     navigator: options.navigator || {}, Map, Set, console: { warn: text => logs.push(text), error: text => logs.push(text) },
     localStorage: {
       getItem: name => { if (options.storageFailure) throw new Error("Unavailable"); return values.get(name) ?? null; },
@@ -41,7 +41,7 @@ test("custom site loads one manual beacon and sends only version/event/mode with
   assert.equal(JSON.parse(b.scripts[0]["data-cf-beacon"]).token, "47f860b809424923942f8c71d6e1cb3a");
   assert.equal(b.requests.length, 2);
   for (const request of b.requests) {
-    assert.equal(request.url, "https://smartify.space/coaching/analytics");
+    assert.equal(request.url, "https://smartify.space/coachprep/analytics");
     assert.equal(request.init.method, "POST");
     assert.equal(request.init.credentials, "omit");
     assert.equal(request.init.referrerPolicy, "no-referrer");

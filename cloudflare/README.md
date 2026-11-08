@@ -1,34 +1,36 @@
 # Custom-path routing
 
-`worker.mjs` serves the GitHub Pages app at `https://smartify.space/coaching/` and accepts bounded anonymous usage events. Deploy it as an ES-module Cloudflare Worker with the two bindings below, no secrets or package dependencies.
+`worker.mjs` serves the GitHub Pages app at `https://smartify.space/coachprep/` and accepts bounded anonymous usage events. Deploy it as an ES-module Cloudflare Worker with the two bindings below, no secrets or package dependencies.
 
 ## Current deployment
 
 | Setting | Value |
 | --- | --- |
 | Worker | `coaching-pages-proxy` |
-| Route | `smartify.space/coaching*` |
+| Route | `smartify.space/coachprep*` |
 | Compatibility date | `2026-11-07` |
 | Main module | `cloudflare/worker.mjs` |
 
-The site's firewall must allow public GET/HEAD requests to host `smartify.space` for exactly `/coaching` and `/coaching/` descendants. Usage events also require a POST exception for exactly `https://smartify.space/coaching/analytics`, with no query string. Keep these exceptions limited to the host, method and path boundary. Other paths and security rules retain their existing behavior, including bot blocking.
+The site's firewall must allow public GET/HEAD requests to host `smartify.space` for exactly `/coachprep` and `/coachprep/` descendants. Usage events also require a POST exception for exactly `https://smartify.space/coachprep/analytics`, with no query string. Keep these exceptions limited to the host, method and path boundary. Other paths and security rules retain their existing behavior, including bot blocking.
+
+The existing `smartify.space/coaching*` route must also stay attached to this Worker. Legacy GET/HEAD requests redirect to `/coachprep/`, preserving the remaining path and query. The exact legacy `/coaching/analytics` POST remains accepted with identical validation, without redirecting already-open tabs. Retain both narrowly scoped collector POST firewall exceptions during the transition. GitHub repository links redirect after rename, but the old GitHub Pages path is not managed by this Worker.
 
 ## Deploy
 
 1. Update `coaching-pages-proxy` with the exact contents of `cloudflare/worker.mjs` as its main ES module, using the compatibility date above.
-2. Add the Worker route `smartify.space/coaching*` on the existing `smartify.space` zone. Cloudflare route matching includes query strings, so the trailing wildcard also covers `/coaching?v=10`.
+2. Add the Worker route `smartify.space/coachprep*` on the existing `smartify.space` zone. Cloudflare route matching includes query strings, so the trailing wildcard also covers `/coachprep?v=10`.
 3. Keep the apex DNS record, existing Cloudflare Tunnel and GitHub Pages configuration unchanged. Leave the GitHub Pages custom-domain CNAME unset.
-4. Check `/coaching`, `/coaching/` and a versioned asset such as `/coaching/app.js?v=10`. Confirm that `/coaching-other` still reaches the existing origin.
+4. Check `/coachprep`, `/coachprep/` and a versioned asset such as `/coachprep/app.js?v=10`. Confirm that `/coachprep-other` still reaches the existing origin.
 
-The Worker checks the path boundary itself. Only `/coaching` and `/coaching/` descendants use GitHub Pages. Other matched paths pass the original request to the existing origin, including its method, headers and body.
+The Worker checks the path boundary itself. Only `/coachprep` and `/coachprep/` descendants use GitHub Pages. Other matched paths pass the original request to the existing origin, including its method, headers and body.
 
-`/coaching` redirects with status 308 to `/coaching/`, keeping the query string. HTTP requests for this app redirect to HTTPS. The slash lets relative assets resolve under `/coaching/`. Only GET and HEAD are accepted for the study app; other methods return 405 with `Allow: GET, HEAD`.
+`/coachprep` redirects with status 308 to `/coachprep/`, keeping the query string. HTTP requests for this app redirect to HTTPS. The slash lets relative assets resolve under `/coachprep/`. Only GET and HEAD are accepted for the study app; other methods return 405 with `Allow: GET, HEAD`.
 
-The upstream is `https://mike-mo.github.io/coaching/`. The Worker forwards the asset path and query string, plus Accept and conditional/range headers. It does not copy browser cookies, authorization, referrers, client identity or analytics headers.
+The upstream is `https://mike-mo.github.io/coachprep/`. The Worker forwards the asset path and query string, plus Accept and conditional/range headers. It does not copy browser cookies, authorization, referrers, client identity or analytics headers.
 
 Upstream status, content, content type and caching headers pass through. HTML responses add `Cache-Control: no-transform` while retaining the upstream's existing cache directives. This prevents Cloudflare from injecting its analytics or JavaScript Detections scripts into the study page. See the [Web Analytics FAQ](https://developers.cloudflare.com/web-analytics/faq/) and [JavaScript Detections documentation](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/#if-your-origin-sends-a-no-transform-header). HEAD and conditional requests keep their usual behavior.
 
-Relative redirects that resolve to the upstream's `/coaching` path, and absolute redirects to that same origin and path, point back to the custom site. Other redirects are preserved. Network failures are logged and return an uncacheable 502; unrelated-origin passthrough errors are left to Cloudflare's normal handling.
+Relative redirects that resolve to the upstream's `/coachprep` path, and absolute redirects to that same origin and path, point back to the custom site. Other redirects are preserved. Network failures are logged and return an uncacheable 502; unrelated-origin passthrough errors are left to Cloudflare's normal handling.
 
 These Worker files and tests are excluded from the GitHub Pages artifact, which includes only the seven runtime files and sharing PNG. Deploy the Worker separately whenever its source changes.
 
@@ -36,7 +38,7 @@ These Worker files and tests are excluded from the GitHub Pages artifact, which 
 
 Keep HTML `no-transform`. Coaching loads the existing site's public Web Analytics beacon manually, once per document, after privacy checks. Do not add another beacon or enable automatic injection for coaching. Mode navigation changes the view within the same page and does not load another beacon. The public browser token in `analytics.js` is not an API credential.
 
-Use the Cloudflare dashboard's **Web Analytics** view for `smartify.space`, filtering paths to `/coaching` and `/coaching/` descendants. The site's other traffic is separate from coaching. Browser privacy settings, blocking and outages can reduce collected data. No changes to bot rules are required.
+Use the Cloudflare dashboard's **Web Analytics** view for `smartify.space`, filtering paths to `/coachprep` and `/coachprep/` descendants. The site's other traffic is separate from coaching. Browser privacy settings, blocking and outages can reduce collected data. No changes to bot rules are required.
 
 Add these Worker bindings without changing plans or enabling paid services:
 

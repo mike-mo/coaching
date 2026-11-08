@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import worker from "./worker.mjs";
 
 const origin = "https://smartify.space";
-const endpoint = origin + "/coaching/analytics";
+const endpoint = origin + "/coachprep/analytics";
 const event = { version: 1, event: "start", mode: "questions" };
 const request = (body = event, options = {}) => new Request(endpoint, {
   method: "POST", headers: { Origin: origin, "Content-Type": "application/json", ...options.headers },
@@ -44,7 +44,7 @@ test("collector denies missing, wrong, Pages and HTTP origins without forwarding
   for (const value of ["", "null", "https://mike-mo.github.io", "https://smartify.space.evil.example", "http://smartify.space"]) {
     assert.equal((await worker.fetch(request(event, { headers: { Origin: value } }), binding(points))).status, 403);
   }
-  const insecure = new Request("http://smartify.space/coaching/analytics", {
+  const insecure = new Request("http://smartify.space/coachprep/analytics", {
     method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(event)
   });
   assert.equal((await worker.fetch(insecure, binding(points))).status, 403);

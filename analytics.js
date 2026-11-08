@@ -4,7 +4,7 @@
   const origin = "https://smartify.space";
   const modes = ["titles", "questions", "mixed", "conversation", "exam"];
   const production = location.origin === origin &&
-    (location.pathname === "/coaching" || location.pathname.startsWith("/coaching/"));
+    (location.pathname === "/coachprep" || location.pathname.startsWith("/coachprep/"));
   const privateSignal = () => navigator.globalPrivacyControl === true ||
     [navigator.doNotTrack, window.doNotTrack].some(value => value === "1" || value === "yes");
   const toggle = document.querySelector("#usage-opt-out");
@@ -58,7 +58,7 @@
   }
   function send(event, mode) {
     if (!allowed()) { updateStatus(); return; }
-    void fetch(`${origin}/coaching/analytics`, {
+    void fetch(`${origin}/coachprep/analytics`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ version: 1, event, mode }),

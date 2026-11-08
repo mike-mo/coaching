@@ -5,8 +5,20 @@ import worker from "./worker.mjs";
 const site = "https://smartify.space";
 const upstream = "https://mike-mo.github.io";
 
+test("legacy public paths redirect preserving path/query, never redirect unsafe methods", async () => {
+  for (const method of ["GET","HEAD"]) {
+    for (const suffix of ["","/","/assets/share-card.png?x=1&y=2","/nested/a%20b?mode=questions"]) {
+      const response=await worker.fetch(new Request(site+"/coaching"+suffix,{method}));
+      assert.equal(response.status,308);
+      assert.equal(response.headers.get("location"),site+"/coachprep"+(suffix||"/"));
+    }
+  }
+  const response=await worker.fetch(new Request(site+"/coaching/app.js",{method:"POST"}));
+  assert.equal(response.status,405);
+});
+
 test("unrelated paths pass the original request through unchanged", async t => {
-  const requests = ["/", "/coaching-other?v=2", "/coachingish", "/COACHING", "/coaching%2Fprivate"];
+  const requests = ["/", "/coachprep-other?v=2", "/coachprepish", "/COACHING", "/coachprep%2Fprivate"];
   const marker = new Response("Existing tunnel response", { status: 403 });
   const mock = t.mock.method(globalThis, "fetch", async request => {
     assert.ok(request instanceof Request);
@@ -25,17 +37,17 @@ test("passthrough failures are not caught as coaching errors", async t => {
   const failure = new Error("Existing origin failed");
   t.mock.method(globalThis, "fetch", async () => { throw failure; });
   const log = t.mock.method(console, "error", () => {});
-  await assert.rejects(worker.fetch(new Request(site + "/coaching-other")), error => error === failure);
+  await assert.rejects(worker.fetch(new Request(site + "/coachprep-other")), error => error === failure);
   assert.equal(log.mock.callCount(), 0);
 });
 
 test("bare path and HTTP requests redirect to HTTPS with slash and query intact", async t => {
   const mock = t.mock.method(globalThis, "fetch", async () => { throw new Error("Redirect must not fetch"); });
   for (const [input, target] of [
-    [site + "/coaching?v=10&topic=8", site + "/coaching/?v=10&topic=8"],
-    ["http://smartify.space/coaching?mode=1", site + "/coaching/?mode=1"],
-    ["http://smartify.space/coaching/styles.css?v=11", site + "/coaching/styles.css?v=11"],
-    ["http://smartify.space/coaching/?v=10", site + "/coaching/?v=10"]
+    [site + "/coachprep?v=10&topic=8", site + "/coachprep/?v=10&topic=8"],
+    ["http://smartify.space/coachprep?mode=1", site + "/coachprep/?mode=1"],
+    ["http://smartify.space/coachprep/styles.css?v=11", site + "/coachprep/styles.css?v=11"],
+    ["http://smartify.space/coachprep/?v=10", site + "/coachprep/?v=10"]
   ]) {
     const response = await worker.fetch(new Request(input));
     assert.equal(response.status, 308);
@@ -47,7 +59,7 @@ test("bare path and HTTP requests redirect to HTTPS with slash and query intact"
 test("only GET and HEAD are accepted for coaching paths", async t => {
   const mock = t.mock.method(globalThis, "fetch", async () => { throw new Error("Disallowed method must not fetch"); });
   for (const method of ["POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
-    const response = await worker.fetch(new Request(site + "/coaching/app.js", { method }));
+    const response = await worker.fetch(new Request(site + "/coachprep/app.js", { method }));
     assert.equal(response.status, 405);
     assert.equal(response.headers.get("allow"), "GET, HEAD");
     assert.match(await response.text(), /GET and HEAD/);
@@ -70,7 +82,7 @@ test("GET forwards versioned asset URL and only safe headers, preserving content
     "X-Analytics-ID": "private-identifier"
   };
   t.mock.method(globalThis, "fetch", async (url, options) => {
-    assert.equal(String(url), upstream + "/coaching/app.js?v=10");
+    assert.equal(String(url), upstream + "/coachprep/app.js?v=10");
     assert.equal(options.method, "GET");
     assert.equal(options.redirect, "manual");
     assert.deepEqual([...options.headers.keys()].sort(), ["accept", "if-modified-since", "if-none-match", "if-range", "range"]);
@@ -81,7 +93,7 @@ test("GET forwards versioned asset URL and only safe headers, preserving content
       headers: { "Content-Type": "text/javascript", "Cache-Control": "max-age=600", ETag: '"version-10"', "Content-Range": "bytes 0-9/14", Vary: "Accept-Encoding" }
     });
   });
-  const response = await worker.fetch(new Request(site + "/coaching/app.js?v=10", { headers: incoming }));
+  const response = await worker.fetch(new Request(site + "/coachprep/app.js?v=10", { headers: incoming }));
   assert.equal(response.status, 206);
   assert.equal(response.statusText, "Partial Content");
   assert.equal(await response.text(), "const test = 1;");
@@ -94,11 +106,11 @@ test("GET forwards versioned asset URL and only safe headers, preserving content
 
 test("HEAD reaches upstream as HEAD and returns headers without a body", async t => {
   t.mock.method(globalThis, "fetch", async (url, options) => {
-    assert.equal(String(url), upstream + "/coaching/");
+    assert.equal(String(url), upstream + "/coachprep/");
     assert.equal(options.method, "HEAD");
     return new Response(null, { headers: { "Content-Length": "300", "Content-Type": "text/html", ETag: '"homepage"' } });
   });
-  const response = await worker.fetch(new Request(site + "/coaching/", { method: "HEAD" }));
+  const response = await worker.fetch(new Request(site + "/coachprep/", { method: "HEAD" }));
   assert.equal(response.body, null);
   assert.equal(await response.text(), "");
   assert.equal(response.headers.get("content-length"), "300");
@@ -116,7 +128,7 @@ test("HTML opts out of edge script injection without changing existing cache pol
     const headers = new Headers({ "Content-Type": "text/html; charset=utf-8", ETag: '"unchanged"' });
     if (original !== null) headers.set("cache-control", original);
     t.mock.method(globalThis, "fetch", async () => new Response("<html>Original study page</html>", { headers }));
-    const response = await worker.fetch(new Request(site + "/coaching/"));
+    const response = await worker.fetch(new Request(site + "/coachprep/"));
     assert.equal(response.headers.get("cache-control"), expected);
     assert.equal(response.headers.get("etag"), '"unchanged"');
     assert.equal(await response.text(), "<html>Original study page</html>");
@@ -130,11 +142,11 @@ test("conditional 304 and missing asset 404 remain unchanged", async t => {
     assert.equal(options.headers.get("if-none-match"), '"same"');
     return new Response(null, { status: 304, headers: { ETag: '"same"', "Cache-Control": "max-age=600" } });
   });
-  const cached = await worker.fetch(new Request(site + "/coaching/app.js", { headers: { "If-None-Match": '"same"' } }));
+  const cached = await worker.fetch(new Request(site + "/coachprep/app.js", { headers: { "If-None-Match": '"same"' } }));
   assert.equal(cached.status, 304);
   assert.equal(cached.body, null);
   assert.equal(cached.headers.get("etag"), '"same"');
-  const missing = await worker.fetch(new Request(site + "/coaching/missing.js"));
+  const missing = await worker.fetch(new Request(site + "/coachprep/missing.js"));
   assert.equal(missing.status, 404);
   assert.equal(await missing.text(), "Missing asset");
   assert.equal(missing.headers.get("cache-control"), "max-age=60");
@@ -142,14 +154,14 @@ test("conditional 304 and missing asset 404 remain unchanged", async t => {
 
 test("relative and same-origin coaching redirects point back to the custom site", async t => {
   for (const [location, expected] of [
-    ["styles.css?v=11", site + "/coaching/styles.css?v=11"],
-    ["/coaching/?v=10", site + "/coaching/?v=10"],
-    [upstream + "/coaching/exam.js?v=5#section", site + "/coaching/exam.js?v=5#section"],
-    ["//mike-mo.github.io/coaching/?source=1", site + "/coaching/?source=1"],
-    ["?v=12", site + "/coaching/?v=12"]
+    ["styles.css?v=11", site + "/coachprep/styles.css?v=11"],
+    ["/coachprep/?v=10", site + "/coachprep/?v=10"],
+    [upstream + "/coachprep/exam.js?v=5#section", site + "/coachprep/exam.js?v=5#section"],
+    ["//mike-mo.github.io/coachprep/?source=1", site + "/coachprep/?source=1"],
+    ["?v=12", site + "/coachprep/?v=12"]
   ]) {
     t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "max-age=60" } }));
-    const response = await worker.fetch(new Request(site + "/coaching/"));
+    const response = await worker.fetch(new Request(site + "/coachprep/"));
     assert.equal(response.status, 302);
     assert.equal(response.headers.get("location"), expected);
     assert.equal(response.headers.get("cache-control"), "max-age=60");
@@ -158,9 +170,9 @@ test("relative and same-origin coaching redirects point back to the custom site"
 });
 
 test("external, non-coaching and malformed redirect locations stay as upstream sent them", async t => {
-  for (const location of ["https://example.com/elsewhere", upstream + "/coaching-other", "/another-project/", "http://["]) {
+  for (const location of ["https://example.com/elsewhere", upstream + "/coachprep-other", "/another-project/", "http://["]) {
     t.mock.method(globalThis, "fetch", async () => new Response(null, { status: 301, headers: { Location: location } }));
-    const response = await worker.fetch(new Request(site + "/coaching/"));
+    const response = await worker.fetch(new Request(site + "/coachprep/"));
     assert.equal(response.status, 301);
     assert.equal(response.headers.get("location"), location);
     t.mock.restoreAll();
@@ -170,10 +182,10 @@ test("external, non-coaching and malformed redirect locations stay as upstream s
 test("upstream failures are logged and return an explicit uncacheable 502", async t => {
   t.mock.method(globalThis, "fetch", async () => { throw new Error("Network unavailable"); });
   const log = t.mock.method(console, "error", () => {});
-  const response = await worker.fetch(new Request(site + "/coaching/app.js?v=10"));
+  const response = await worker.fetch(new Request(site + "/coachprep/app.js?v=10"));
   assert.equal(response.status, 502);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.match(await response.text(), /could not be reached/);
   assert.equal(log.mock.callCount(), 1);
-  assert.deepEqual(log.mock.calls[0].arguments, ["Coaching upstream request failed", { path: "/coaching/app.js", error: "Network unavailable" }]);
+  assert.deepEqual(log.mock.calls[0].arguments, ["Coaching upstream request failed", { path: "/coachprep/app.js", error: "Network unavailable" }]);
 });
