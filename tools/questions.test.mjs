@@ -16,6 +16,7 @@ function refs(c, values) {
     const [parent, number] = value.split(".").map(Number);
     assert.equal(parent, c);
     assert.ok(number >= 1 && number <= maximum[c], value);
+    assert.ok(data.subcompetencies[value]?.length > 20, `Full official wording for ${value}`);
   }
 }
 
@@ -23,6 +24,12 @@ test("eight source-verified official titles and definitions remain unchanged", (
   const digest = createHash("sha256").update(JSON.stringify(data.competencies.map(c => [c.title, c.definition]))).digest("hex");
   assert.equal(digest, "de8ffd855b29152a935ebca375bdecd80d9329c86b6eafaede8487ab02d30895");
   assert.deepEqual(Array.from(data.competencies, c => c.id), [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test("referenced official sub-competency wording matches the PDF-verified text", () => {
+  assert.equal(Object.keys(data.subcompetencies).length,61);
+  assert.equal(createHash("sha256").update(JSON.stringify(data.subcompetencies)).digest("hex"),
+    "65c23f92749d7489ed1ed120a99f1367edbce75d38bdac449ceca532484a1f86");
 });
 
 test("32 differentiated scenarios cover each primary competency four times with stable new IDs", () => {

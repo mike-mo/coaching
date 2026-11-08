@@ -2,7 +2,7 @@
 
 ## International Coaching Federation
 
-The eight competency titles and their short definitions are quotations from **2025 ICF Core Competencies**, International Coaching Federation, released September 2025, revision 09.08.25, PDF pp. 3-10.
+The eight competency titles, their short definitions and the sub-competencies cited in study feedback are quotations from **2025 ICF Core Competencies**, International Coaching Federation, released September 2025, revision 09.08.25, PDF pp. 3-10. Apostrophes are displayed as straight marks; the wording is unchanged.
 
 Source: [ICF core competencies](https://coachingfederation.org/credentialing/coaching-competencies/icf-core-competencies/).
 
