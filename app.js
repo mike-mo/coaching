@@ -9,7 +9,7 @@
   const oldPrivacy=[...document.querySelectorAll("#about-dialog p")].find(p=>p.textContent.includes("doesn't save what you type") || p.textContent.includes("optional deadline"));
   if(oldPrivacy){
     oldPrivacy.textContent="Your saved work stays in this browser. It includes practice counts, review dates and paused sessions, including typed name attempts, selected responses and answer times. Exam rehearsal saves your current answers, elapsed time and previous completed pass for optional self-evaluation. There is no login or AI, and nothing syncs between devices. Private browsing or clearing site data can erase your progress. Use invented examples and save an exam text copy for a backup.";
-    const note=document.createElement("p");note.textContent="Question practice scores use 90 points for the strongest option, 80 for a valid approach, and zero for a less suitable response, plus up to 10 accepted-response speed points capped through 4 seconds and tapering to zero at 64 seconds. Feedback and time away are excluded. The coffee reminder appears below closing results from the third distinct local visiting day; Not now suppresses it for that day. At most three visiting dates and the dismissal date stay locally, never in usage stats.";oldPrivacy.after(note);
+    const note=document.createElement("p");note.textContent="Question practice scores use 90 points for the strongest option, 80 for a valid approach, and zero for a less suitable response, plus up to 14 accepted-response speed points capped through 4 seconds and tapering to zero at 60 seconds. Earlier saved scores keep their original bonus. Feedback and time away are excluded. The coffee reminder appears below closing results from the third distinct local visiting day; Not now suppresses it for that day. At most three visiting dates and the dismissal date stay locally, never in usage stats.";oldPrivacy.after(note);
   }
   if(!document.querySelector("#coffee-warning")){
     const message=document.createElement("p");message.id="coffee-warning";message.className="warning";message.setAttribute("role","alert");message.hidden=true;document.querySelector("main").before(message);
@@ -20,12 +20,12 @@
   const warning = document.querySelector("#storage-warning");
   const usage = window.USAGE;
   if (!usage) console.warn("Study usage module is unavailable. Studying is unaffected.");
-  const empty = () => ({version:1, items:{}, scenarios:0, exam:null, examPrevious:null, hintedSuccessIndex:0, practices:{}});
+  const empty = () => ({version:1, items:{}, scenarios:0, exam:null, examPrevious:null, hintedSuccessIndex:0, practices:{},previousRounds:{}});
   const hintedSuccessMessages = ["You got it!", "That's it!", "Nice work!"];
   const hintedSuccessSupport = "Hints help you learn. Keep practicing until you can remember it without them.";
   const legacyQuestionIds = Array.from({length:8},(_,i)=>`q${i+1}`);
   const allIds = D.competencies.map(c => `r${c.id}`).concat(D.questions.map(q => q.id),legacyQuestionIds);
-  let lastStored=null,needsExamMigration=false;
+  let lastStored=null,needsExamMigration=false,needsPracticeMigration=false;
   let state = load();
   let questionOrder = [];
   let view = "home", session = null, active = null;
@@ -39,6 +39,10 @@
   dialog.setAttribute("aria-labelledby","study-mode");
   dialog.innerHTML='<header class="study-head"><strong id="study-mode"></strong><span id="study-position"></span><div class="study-head-actions"></div><button id="close-study" class="study-close" aria-label="Close study and show session results">×</button></header><div id="study-errors"></div><div id="study-body"></div><footer id="study-dock"></footer>';
   document.body.append(dialog);
+  const introBrand=document.querySelector("#brand").cloneNode(true);
+  introBrand.id="study-brand";
+  introBrand.onclick=e=>{e.preventDefault();closeStudy();};
+  document.querySelector(".study-head").prepend(introBrand);
   const moved=[warning,document.querySelector("#theme-warning"),document.querySelector("#coffee-warning"),document.querySelector("#announcement")].map(element=>{
     const anchor=document.createComment("warning-home");element.before(anchor);return {element,anchor};
   });
@@ -70,8 +74,9 @@
   }
   function openShell(){
     if(dialog.open)return;
+    document.querySelectorAll(".round-confetti").forEach(layer=>layer.remove());
     launchFocus=document.activeElement;
-    returnView={view,session,active,flow,scenarioNode,history,branchChoice,introMode,scrollY:window.scrollY,nodes:document.createDocumentFragment()};
+    returnView={view,session,active,flow,scenarioNode,history,branchChoice,introMode,examAtOpen:state.exam,scrollY:window.scrollY,nodes:document.createDocumentFragment()};
     returnView.nodes.append(...main.childNodes);
     modalStarted=false;
     document.querySelector("#study-body").append(main);
@@ -79,53 +84,64 @@
     document.querySelector(".study-head-actions").append(theme);
     document.body.classList.add("study-open");dialog.showModal();
   }
-  function beginFlow(mode,saved=null){
+  function beginFlow(mode,saved=null,resumeUsage=true){
     modalStarted=true;
     flow=saved?JSON.parse(JSON.stringify(saved)):{version:1,mode,elapsedMs:0,answerMs:0,responses:[],completed:false,snapshot:null};
     clockStarted=performance.now();answerStarted=null;introMode=null;
     if(mode==="exam" && state.exam){
       if(!saved)flow.elapsedMs=state.exam.elapsedMs;
-      if(state.exam.status!=="draft"){flow.elapsedMs=state.exam.elapsedMs;clockStarted=null;}
+      if(state.exam.status!=="draft"){flow.elapsedMs=state.exam.elapsedMs;flow.completionRecorded=true;clockStarted=null;}
     }
     if(saved){
       const s=saved.snapshot;view=s.view;session=s.session;active=s.active;scenarioNode=s.scenarioNode;branchChoice=s.branchChoice;
       history=s.history.map(h=>({node:h.node,choice:D.scenario.nodes[h.node].choices[h.index]}));
-      usage?.resume(usageMode(mode));
+      if(session && session.roundStart===undefined){
+        session.roundStart=Math.floor(session.index/8)*8;
+        session.roundEnd=Math.min(session.roundStart+8,session.items.length);
+      }
+      if(resumeUsage)usage?.resume(usageMode(mode));
     }
   }
   function noteResponse(item,outcome,extra={}){
     if(!flow)return;
-    flow.responses.push({c:item.c,type:item.type,outcome,seconds:answerTime()/1000,...extra});
+    const seconds=answerTime()/1000;
+    flow.responses.push({c:item.c,type:item.type,outcome,seconds,...extra,...(item.type==="questions"?{score:P.points(outcome,seconds),scoreVersion:2}:{})});
     flow.answerMs=0;answerStarted=null;
   }
   function noteActive(){
     if(!active || active.reported)return;
     active.reported=true;
     noteResponse(active.item,active.outcome,{matched:active.matched===true,revealed:active.revealed===true});
-    if(session && session.index===session.items.length-1){flow.completed=true;usage?.complete(usageMode(flow.mode));}
   }
   function startMode(mode){
+    const previous=state.practices[mode],queued=previous?.snapshot?.session;
+    if(previous?.completed && queued && queued.index+(previous.snapshot.active?.done?1:0)<queued.items.length){
+      beginFlow(mode,previous,false);
+      flow.completed=false;flow.completionRecorded=false;flow.elapsedMs=0;flow.answerMs=0;
+      session.roundStart=session.index;session.roundEnd=Math.min(session.index+8,session.items.length);
+      usage?.begin(usageMode(mode));render();focus(".scenario-prompt,.recall-prompt");return;
+    }
     beginFlow(mode);
     if(mode==="scenario"){
       view="scenario";session=null;active=null;scenarioNode=D.scenario.start;history=[];branchChoice=null;
       usage?.begin("conversation");renderScenario();focus(".client");return;
     }
-    startSession(mode,mode==="recall"?8:mode==="questions"?D.questions.length:8);
+    startSession(mode,8);
   }
   function showIntro(mode){
     openShell();
     const saved=state.practices[mode];
-    if(saved && !saved.completed && (mode!=="exam" || state.exam)){beginFlow(mode,saved);render();focus();return;}
+    if(saved && !saved.completed && (mode!=="exam" || state.exam)){beginFlow(mode,saved);render();focus(".scenario-prompt,.recall-prompt,h1,.answer-card.selected summary");return;}
     flow=null;clockStarted=null;answerStarted=null;introMode=mode;view=mode;active=null;session=null;
     if(mode==="exam"){
       if(state.exam){beginFlow("exam",saved || null);view="exam";flow.completed=state.exam.status!=="draft";}
-      exam.render();return;
+      exam.render();focus();return;
     }
     const copy=mode==="recall"?"Name each competency using the official wording. Try from memory, then use a hint or Pass if you need it.":
       mode==="scenario"?"Choose what you would say to a fictional client, then explore a possible reply. Practice noticing what the client wants, questioning your assumptions and choosing how to follow up. Compare the reasoning behind different replies. This conversation has no score.":
-      mode==="mixed"?"Eight items mix competency names and coaching questions. Recall names from memory; choose the strongest question response for the moment.":
-      "More than one response may fit. Choose the strongest option for this moment.";
-    main.innerHTML=`<section class="study-intro"><div class="intro-mark" aria-hidden="true">8</div><h1>${modeNames[mode]}</h1><p>${copy}</p>${mode==="scenario"?`<h2>${escape(D.scenario.title)}</h2><p>${escape(D.scenario.intro)}</p>`:""}<p>Take your time. You can revisit the reasoning after answering. You can close this introduction without starting.</p>${mode==="questions"?`<details open><summary>About the practice score</summary><p>Strongest responses start at 90 points, valid approaches at 80. Both can add up to 10 speed points: answers within 4 seconds get the same maximum bonus, declining to zero at 64 seconds. Less suitable responses get no points. Only answer time counts, not feedback reading. This is a study mechanic, not an ICF assessment.</p></details>`:""}</section>`;
+      mode==="mixed"?"Up to eight items mix competency names and coaching questions. Recall names from memory; choose the strongest question response for the moment.":
+      "Practice choosing how to respond in realistic coaching situations. After each answer, explore why some responses fit the client better than others.";
+    main.innerHTML=`<section class="study-intro"><h1>${modeNames[mode]}</h1><p>${copy}</p>${mode==="scenario"?`<h2>${escape(D.scenario.title)}</h2><p>${escape(D.scenario.intro)}</p>`:""}${mode==="questions"?`<p class="intro-score">More than one response may work. The strongest earns 90 points; other good responses earn a little less. Good responses can earn up to 14 bonus points within 4 seconds, with smaller bonuses up to one minute.</p>`:""}</section>`;
     updateShell();
     const button=document.createElement("button");button.id="begin-practice";button.className="primary";button.textContent="Start "+modeNames[mode].toLowerCase();
     button.onclick=()=>startMode(mode);document.querySelector("#study-dock").append(button);focus();
@@ -134,24 +150,52 @@
     dialog.close();document.body.classList.remove("study-open");
     homeAnchor.after(main);moved.forEach(({element,anchor})=>anchor.after(element));themeAnchor.after(theme);
   }
+  function recordCompletion(){
+    if(!flow?.completed || flow.completionRecorded)return null;
+    const matches=flow.mode==="exam"?state.exam?.answers.map((a,i)=>window.EXAM.compareTitle(a.title,i+1,D.competencies).kind==="match"):null;
+    const current=P.roundMetric(flow,matches),previous=state.previousRounds[flow.mode];
+    const changed={...state.previousRounds};
+    if(current)changed[flow.mode]=current;else delete changed[flow.mode];
+    const old=state.previousRounds;
+    state.previousRounds=changed;flow.completionRecorded=true;stash();
+    return {old,celebrate:P.improves(current,previous)};
+  }
+  function confetti(){
+    const label=flow?.mode==="exam"?"Your name recall":"Your round";
+    announce(`${label} matched or improved on last time.`);
+    if(matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+    const layer=document.createElement("div");layer.className="round-confetti";layer.setAttribute("aria-hidden","true");
+    for(let i=0;i<24;i++){
+      const piece=document.createElement("span");
+      piece.style.cssText=`--x:${Math.random()*100}%;--drift:${Math.random()*160-80}px;--delay:${Math.random()*.25}s;--spin:${Math.random()*720-360}deg;--color:${["#88bea3","#e5c369","#de9eac"][i%3]}`;
+      layer.append(piece);
+    }
+    (dialog.open?dialog:document.body).append(layer);setTimeout(()=>layer.remove(),2200);
+  }
   function closeStudy(){
     if(!modalStarted && returnView){
       const previous=returnView;returnView=null;
       closeShell();main.replaceChildren(previous.nodes);
       ({view,session,active,flow,scenarioNode,history,branchChoice,introMode}=previous);
+      if(view==="home" && !main.querySelector(".session-summary") && previous.examAtOpen!==state.exam)renderHome();
       clockStarted=null;answerStarted=null;updateNavigation();
       (launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus({preventScroll:true});
       window.scrollTo(0,previous.scrollY);
       return;
     }
     if(flow){pause();stash();}
-    if(!save()){if(flow){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}return;}
+    const completion=recordCompletion();
+    if(!save()){
+      if(completion){state.previousRounds=completion.old;flow.completionRecorded=false;stash();}
+      if(flow){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}return;
+    }
     const result=flow || {mode:introMode || view,elapsedMs:0,responses:[],completed:false};
     closeShell();returnView=null;
     view="home";updateNavigation();renderSummary(result);
+    if(completion){usage?.complete(usageMode(result.mode));if(completion.celebrate)confetti();}
   }
   function renderSummary(result){
-    const answered=result.responses || [],draft=state.exam,examMode=result.mode==="exam";
+    const answered=P.roundResponses(result),draft=state.exam,examMode=result.mode==="exam";
     const titleMatches=examMode && draft?.status!=="draft"?draft?.answers.map((a,i)=>window.EXAM.compareTitle(a.title,i+1,D.competencies).kind==="match"):null;
     const mean=answered.length?answered.reduce((n,r)=>n+r.seconds,0)/answered.length:null;
     const pendingRecall=active && !active.done && active.item.type==="recall" && (active.hints>0 || active.attempt.trim())?active:null;
@@ -167,21 +211,31 @@
       const recallOutcome=result.mode==="recall"?P.recallOutcome(names[0]) || (pending&&pendingRecall.hints?"assisted":null):null;
       const recallLabels={unaided:"Correct without hints",assisted:"Used hints",missed:"Wrong / passed"};
       const recallIcons={unaided:"✓",assisted:"?",missed:"×"};
-      return `<section class="competency-stat ${practiced?"":"unseen"}${recallOutcome?` recall-${recallOutcome}`:""}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.points(r.outcome,r.seconds),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Name entered":"Name blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 sentence fields filled${titleMatches?` · ${titleMatches[c.id-1]?"Name matches":"Name needs review"}`:""}</p>`:
+      return `<section class="competency-stat ${practiced?"":"unseen"}${recallOutcome?` recall-${recallOutcome}`:""}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.earnedPoints(r),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Name entered":"Name blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 sentence fields filled${titleMatches?` · ${titleMatches[c.id-1]?"Name matches":"Name needs review"}`:""}</p>`:
       result.mode==="recall"?`${recallOutcome?`<p class="recall-outcome"><span aria-hidden="true">${recallIcons[recallOutcome]}</span> ${recallLabels[recallOutcome]}</p>`:""}${pending?"<p>Unfinished. Resume to continue.</p>":""}`:
       `${qs.length?`<p>${count("recognition")} strongest · ${count("reasonable")} valid · ${count("missed")} to improve</p><p>${qs.length} answered · average answer time ${P.duration(qs.reduce((n,r)=>n+r.seconds,0)/qs.length*1000)}</p>`:""}${names.length?`<p>${names.filter(r=>r.matched&&r.outcome==="unaided").length} correct without hints · ${names.filter(r=>r.outcome==="assisted").length} with hints or Pass · ${names.filter(r=>!r.matched&&!r.revealed).length} need another look</p>`:""}${pending?`<p>Unfinished name attempt${pendingRecall.hints?` · ${pendingRecall.hints} hint${pendingRecall.hints===1?"":"s"} used`:""}. Resume to continue.</p>`:""}${conversation.length?`<p>${conversation.length} fictional conversation choice${conversation.length===1?"":"s"} explored. No automated score.</p>`:""}`}</section>`;
-    }).join("")}</div><details class="summary-help" open><summary>About these results</summary><p>These are practice results, not an official ICF assessment. ${q.length?"Question scores use 90 / 80 / 0 base points plus up to 10 accepted-response speed points, capped through 4 seconds and tapering to zero at 64 seconds. The competency score is the rounded mean of answered questions only.":""} Name recall, conversation choices and exam points are not speed-scored. Exam practice time counts up and pauses while you are away.</p></details>${coffee.eligible()?`<aside id="coffee-reminder" class="coffee-card"><h2>Say thanks</h2><p>Enjoying the practice? A coffee would make my day!</p><div class="actions"><a href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action">Buy me a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`:""}<div class="summary-actions actions"><button id="summary-home">Home</button><button class="primary" id="resume-practice">${result.completed?"Practice again":"Resume "+(modeNames[result.mode] || "practice").toLowerCase()}</button></div></section>`;
+    }).join("")}</div><details class="summary-help" open><summary>About these results</summary><p>These are practice results, not an official ICF assessment. ${q.length?"Question scores use 90 / 80 / 0 base points plus up to 14 accepted-response speed points, capped through 4 seconds and tapering to zero at one minute. The competency score is the rounded mean of earned scores. Earlier saved answers keep their original bonus.":""} Name recall, conversation choices and exam points are not speed-scored. Exam practice time counts up and pauses while you are away.</p></details>${coffee.eligible()?`<aside id="coffee-reminder" class="coffee-card"><h2>Say thanks</h2><p>Enjoying the practice? A coffee would make my day!</p><div class="actions"><a href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action">Buy me a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`:""}<div class="summary-actions actions"><button id="summary-home">${result.completed?"Practice a different mode":"Home"}</button><button class="primary" id="resume-practice">${result.completed?"Start a new round":"Resume "+(modeNames[result.mode] || "practice").toLowerCase()}</button></div></section>`;
     document.querySelector("#summary-home").onclick=()=>{flow=null;view="home";renderHome();(launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus();};
-    document.querySelector("#resume-practice").onclick=()=>navigate(result.mode || "recall");
+    document.querySelector("#resume-practice").onclick=()=>{
+      if(result.completed && ["recall","questions","mixed"].includes(result.mode)){openShell();startMode(result.mode);}
+      else {navigate(result.mode || "recall");if(result.completed && result.mode==="exam")document.querySelector("#exam-discard")?.click();}
+    };
     document.querySelector("#dismiss-coffee")?.addEventListener("click",()=>{if(coffee.dismiss()){document.querySelector("#coffee-reminder").remove();document.querySelector("#resume-practice").focus();}});
+    updateNavigation();
     focus();
   }
   function updateShell(){
     if(!dialog.open)return;
     document.querySelector("#close-study").setAttribute("aria-label",modalStarted?"Close study and show session results":"Close introduction");
     const mode=flow?.mode || introMode || view;
-    document.querySelector("#study-mode").textContent=modeNames[mode] || "Practice";
-    document.querySelector("#study-position").textContent=session?`${Math.min(session.index+1,session.items.length)} / ${session.items.length}`:"";
+    const modeLabel=document.querySelector("#study-mode");
+    modeLabel.textContent=modeNames[mode] || "Practice";
+    modeLabel.hidden=!modalStarted;
+    introBrand.hidden=modalStarted;
+    const heading=main.querySelector("h1");
+    if(!modalStarted && heading)heading.id="study-intro-title";
+    dialog.setAttribute("aria-labelledby",modalStarted?"study-mode":"study-intro-title");
+    document.querySelector("#study-position").textContent=session?`${Math.min(session.index-(session.roundStart || 0)+1,(session.roundEnd || session.items.length)-(session.roundStart || 0))} / ${(session.roundEnd || session.items.length)-(session.roundStart || 0)}`:"";
     const dock=document.querySelector("#study-dock");dock.replaceChildren();
     const time=document.createElement("span");time.id="practice-time";time.setAttribute("role","timer");time.setAttribute("aria-live","off");time.setAttribute("aria-label","Elapsed study time");time.textContent=flow?P.duration(elapsed()):"";dock.append(time);
     const selector=view==="exam"?'#exam-start,button[form="exam-form"],#exam-download,#exam-discard':
@@ -260,8 +314,26 @@
       s.practices=s.practices && typeof s.practices==="object" && !Array.isArray(s.practices)?s.practices:{};
       for(const [mode,saved] of Object.entries(s.practices)){
         if(saved?.mode!==mode || !window.PRACTICE.validSaved(saved,D)){delete s.practices[mode];storageError("A saved practice session could not be opened. Existing review counts and exam answers are still available.");}
+        else {
+          const migrated=window.PRACTICE.migrateScores(saved);
+          if(migrated!==saved){s.practices[mode]=migrated;needsPracticeMigration=true;}
+        }
       }
       s.exam=window.EXAM.migrate(s.exam,s.practices.exam?.elapsedMs);
+      if(s.previousRounds!==undefined && !window.PRACTICE.validBaselines(s.previousRounds))storageError("Your previous-round comparison could not be opened. Saved study answers are unchanged.");
+      s.previousRounds=window.PRACTICE.validBaselines(s.previousRounds)?s.previousRounds:{};
+      for(const [mode,saved] of Object.entries(s.practices)){
+        if(saved.completed && !saved.completionRecorded && !s.previousRounds[mode]){
+          const metric=window.PRACTICE.roundMetric(saved);
+          if(metric){s.previousRounds[mode]=metric;needsPracticeMigration=true;}
+        }
+        if(saved.completed && saved.completionRecorded===undefined){saved.completionRecorded=true;needsPracticeMigration=true;}
+      }
+      const previousExam=s.exam && s.exam.status!=="draft"?s.exam:s.examPrevious;
+      if(previousExam && !s.previousRounds.exam){
+        const matches=previousExam.answers.map((a,i)=>window.EXAM.compareTitle(a.title,i+1,D.competencies).kind==="match");
+        s.previousRounds.exam=window.PRACTICE.roundMetric({mode:"exam"},matches);needsPracticeMigration=true;
+      }
       return s;
     } catch {
       storageError("We couldn't open your saved progress or rehearsal. This tab starts fresh. Your old saved data is unchanged unless you practice or reset. Choose Reset progress to delete it.");
@@ -291,16 +363,23 @@
   const citation = (c, refs = []) => `<div class="citation"><p>${D.source} · ${D.version}<br>Official 2025 model · PDF p. ${Number(c)+2}${refs.length ? " · sub-competencies quoted below" : " · competency name"}.</p>${refs.length?`<ul class="official-references">${refs.map(ref=>`<li><strong>${ref}</strong> "${escape(D.subcompetencies[ref])}"</li>`).join("")}</ul>`:""}</div>`;
   const announce = text => { document.querySelector("#announcement").textContent = text; };
   function focus(selector = "h1") {
-    const el = main.querySelector(selector);
+    const el = [...main.querySelectorAll(selector)].find(element=>element.getClientRects().length);
     if (el) { el.setAttribute("tabindex","-1"); el.focus(); }
   }
   const normalizeTitle = window.EXAM.normalizeTitle;
   const titleLabel = window.EXAM.titleLabel;
-  const exam = window.EXAM.create({get:()=>state.exam,set:a=>{state.exam=a;if(!a){delete state.practices.exam;flow=null;clockStarted=null;answerStarted=null;}},save:persist,storageError,
+  const exam = window.EXAM.create({get:()=>state.exam,set:a=>{state.exam=a;if(!a){delete state.practices.exam;flow=null;clockStarted=null;answerStarted=null;modalStarted=false;}},save:persist,storageError,
     getPrevious:()=>state.examPrevious,setPrevious:a=>{state.examPrevious=a;},getElapsed:()=>flow?.mode==="exam"?elapsed():state.exam?.elapsedMs || 0,
     hasStorageFailure:()=>saveFailed,announce,escape,focus,home:closeStudy,
     isVisible:()=>view==="exam",onStarted:()=>usage?.begin("exam"),
-    onCompleted:()=>{usage?.complete("exam");if(flow?.mode==="exam"){pause();flow.elapsedMs=state.exam.elapsedMs;flow.completed=true;}},onFinished:()=>{if(view==="home")renderHome();},
+    onCompleted:()=>{
+      if(flow?.mode==="exam"){
+        pause();flow.elapsedMs=state.exam.elapsedMs;flow.completed=true;
+        const completion=recordCompletion();
+        if(completion && persist()){usage?.complete("exam");if(completion.celebrate)confetti();}
+        else if(completion){state.previousRounds=completion.old;flow.completionRecorded=false;stash();}
+      }
+    },onFinished:()=>{if(view==="home")renderHome();},
     onRender:()=>{if(state.exam && !flow && dialog.open)beginFlow("exam");if(flow?.mode==="exam" && state.exam)flow.completed=state.exam.status!=="draft";updateShell();},citation});
   const totals = field => Object.values(state.items).reduce((n,p) => n+p[field],0);
   const outcomeLabels = {unaided:"Without hints",assisted:"With hints",recognition:"Strongest option",reasonable:"Valid approach",missed:"Needs another look"};
@@ -334,6 +413,7 @@
     return mins < 60 ? `In ${mins} min` : `Review ${new Date(p.due).toLocaleDateString(undefined,{month:"short",day:"numeric"})}`;
   }
   function updateNavigation(){
+    document.querySelector(".tabs").hidden=view==="home" && !main.querySelector(".session-summary");
     document.querySelectorAll("[data-view]").forEach(b => {
       if (b.dataset.view === view) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current");
     });
@@ -362,6 +442,7 @@
     document.querySelectorAll("[data-start]").forEach(b => b.onclick = () => navigate(b.dataset.start));
     document.querySelector("#start-mixed").onclick = () => navigate("mixed");
     document.querySelector("#reset").onclick = () => document.querySelector("#reset-dialog").showModal();
+    updateNavigation();
   }
   function startSession(type, count) {
     arrangeQuestions();
@@ -383,7 +464,8 @@
       }
       items=shuffle(spread).concat(shuffle(ranked.filter(item=>!spread.includes(item))));
     }
-    session={items:items.slice(0,count),index:0,results:[],type};
+    const selected=items.slice(0,Math.min(count,8));
+    session={items:selected,index:0,results:[],type,roundStart:0,roundEnd:selected.length};
     usage?.begin(type==="recall"?"titles":type);
     view=type==="mixed"?"recall":type;
     active=null; render(); focus(".scenario-prompt,.recall-prompt");
@@ -398,7 +480,7 @@
     optionOrder:item.type==="questions"?shuffle(D.questions.find(q=>q.id===item.id).options.map((_,i)=>i)):null}; }
   function renderStudy() {
     announce("");
-    if (session && session.index>=session.items.length && session.items.length) return renderComplete();
+    if (session && session.index>=(session.roundEnd || session.items.length) && session.items.length) return renderComplete();
     const item=active?.item || currentItem();
     if (!item) {
       main.innerHTML=`<h1>No practice items available.</h1><button id="back-home">Back to home</button>`;
@@ -502,12 +584,11 @@
       active=items.length?makeActive(items[(idx+1)%items.length]):null;
       renderStudy();focus();return;
     }
-    active=null;flow.answerMs=0;answerStarted=null;renderStudy();focus(session.index>=session.items.length?"h1":".scenario-prompt,.recall-prompt");
+    active=null;flow.answerMs=0;answerStarted=null;renderStudy();focus(session.index>=(session.roundEnd || session.items.length)?"h1":".scenario-prompt,.recall-prompt");
   }
   function renderComplete() {
-    flow.completed=true;persist();
-    usage?.complete(session.type==="recall"?"titles":session.type);
-    main.innerHTML=`<h1>Round finished.</h1><p>You answered ${session.results.length} practice items.</p><button class="primary" id="back-home">See session results</button>`;
+    flow.completed=true;
+    main.innerHTML=`<h1>Round finished.</h1><p>You answered ${(session.roundEnd || session.items.length)-(session.roundStart || 0)} practice items.</p><button class="primary" id="back-home">See session results</button>`;
     document.querySelector("#back-home").onclick=closeStudy;updateShell();
     closeStudy();
   }
@@ -546,15 +627,15 @@
   };
   arrangeQuestions();
   if (state.exam?.status==="draft") usage?.resume("exam");
-  if(needsExamMigration)save();
+  if(needsExamMigration || needsPracticeMigration)save();
   render();
   };
   const base=document.currentScript?.src || location.href;
   const assets=[
-    ["practice.js?v=2",!!window.PRACTICE?.recallOutcome],
+    ["practice.js?v=3",window.PRACTICE?.uiVersion===3],
     ["exam.js?v=12",window.EXAM?.uiVersion===12],
     ["content.js?v=9",!!window.STUDY?.examInstruction],
-    ["styles.css?v=16",!!document.querySelector('link[href="styles.css?v=16"]')]
+    ["styles.css?v=17",!!document.querySelector('link[href="styles.css?v=17"]')]
   ].filter(([,ready])=>!ready);
   if(!assets.length)start();
   else Promise.all(assets.map(([source])=>new Promise((resolve,reject)=>{

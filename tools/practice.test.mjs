@@ -16,13 +16,48 @@ test("recall summary uses the actual match and Pass, not assisted review credit 
   assert.equal(P.recallOutcome({outcome:"missed",matched:true}),"missed");
   assert.equal(P.recallOutcome({outcome:"assisted"}),"missed");
 });
-test("correctness dominates; bonus is capped at four seconds and zero at 64",()=>{
-  for(const t of [0,1,4]){assert.equal(P.points("recognition",t),100);assert.equal(P.points("reasonable",t),90);}
-  assert.equal(P.points("recognition",34),95);assert.equal(P.points("reasonable",34),85);
-  for(const t of [64,1000]){assert.equal(P.points("recognition",t),90);assert.equal(P.points("reasonable",t),80);}
-  for(const t of [0,4,34,64,1000])assert.equal(P.points("missed",t),0);
+test("approved 14-point bonus is capped at four seconds and zero at 60",()=>{
+  for(const t of [0,1,4]){assert.equal(P.points("recognition",t),104);assert.equal(P.points("reasonable",t),94);}
+  assert.equal(P.points("recognition",32),97);assert.equal(P.points("reasonable",32),87);
+  for(const t of [60,1000]){assert.equal(P.points("recognition",t),90);assert.equal(P.points("reasonable",t),80);}
+  for(const t of [0,4,32,60,1000])assert.equal(P.points("missed",t),0);
+  assert.ok(P.points("reasonable",4)>P.points("recognition",60));
   for(const t of [-1,NaN,Infinity])assert.throws(()=>P.points("recognition",t));
   assert.throws(()=>P.points("made-up",1));
+});
+test("historical earned scores retain their original bonus",()=>{
+  const old={responses:[
+    {type:"questions",outcome:"recognition",seconds:4},
+    {type:"questions",outcome:"reasonable",seconds:34},
+    {type:"questions",outcome:"missed",seconds:0},
+    {type:"recall",outcome:"unaided",seconds:2}
+  ]};
+  const migrated=P.migrateScores(old);
+  assert.notEqual(migrated,old);
+  assert.deepEqual(Array.from(migrated.responses.slice(0,3),r=>r.score),[100,85,0]);
+  assert.equal(Object.hasOwn(migrated.responses[3],"score"),false);
+  assert.equal(Object.hasOwn(old.responses[0],"score"),false);
+  assert.equal(P.migrateScores(migrated),migrated);
+  assert.equal(P.earnedPoints({score:100,outcome:"recognition",seconds:4}),100);
+  assert.equal(P.earnedPoints({score:104,outcome:"recognition",seconds:4}),104);
+});
+test("round comparisons require the same objective scoring scheme",()=>{
+  const q={type:"questions",outcome:"recognition",seconds:4,score:104,scoreVersion:2};
+  const r={type:"recall",outcome:"unaided",matched:true,revealed:false,seconds:1};
+  const p={mode:"questions",responses:[{...q,score:100,scoreVersion:1},q],snapshot:{session:{roundStart:1,roundEnd:2}}};
+  const full=P.roundMetric(p);
+  assert.equal(full.score,1);
+  assert.equal(P.roundMetric({...p,snapshot:{}}),null);
+  assert.equal(P.roundMetric({mode:"recall",responses:[r,{...r,outcome:"assisted"}]}).score,.5);
+  assert.equal(P.roundMetric({mode:"mixed",responses:[r,q]}).score,1);
+  assert.equal(P.roundMetric({mode:"exam"},[true,true,false,false,false,false,false,false]).score,.25);
+  assert.equal(P.improves(full,null),false);
+  assert.equal(P.improves(full,{scheme:full.scheme,score:1}),true);
+  assert.equal(P.improves(full,{scheme:full.scheme,score:.5}),true);
+  assert.equal(P.improves({...full,score:.4},{scheme:full.scheme,score:.5}),false);
+  assert.equal(P.improves(full,{scheme:"older",score:.5}),false);
+  assert.equal(P.validBaselines({questions:full}),true);
+  assert.equal(P.validBaselines({questions:{...full,score:NaN}}),false);
 });
 test("three distinct local calendar days, not loads or consecutive days",()=>{
   let s={version:1,days:[],dismissed:null};
@@ -58,4 +93,11 @@ test("saved sessions preserve exact item identity and reject corrupt metadata",(
   change(p=>p.snapshot.history=[{node:"toString",index:0}]);
   change(p=>p.snapshot.view="home");
   change(p=>p.responses=[{c:1,type:"questions",outcome:"explored",seconds:1}]);
+  change(p=>p.completionRecorded="yes");
+  change(p=>{p.snapshot.session.roundStart=0;p.snapshot.session.roundEnd=9;});
+  const scored=JSON.parse(JSON.stringify(p));
+  scored.snapshot.active.done=true;scored.snapshot.active.reported=true;scored.snapshot.active.selected=0;
+  scored.responses=[{c:q.c,type:"questions",outcome:"recognition",seconds:4,score:104,scoreVersion:2}];
+  assert.equal(P.validSaved(scored,D),true);
+  for(const score of [-1,105,NaN,"104"])assert.equal(P.validSaved({...scored,responses:[{...scored.responses[0],score}]},D),false);
 });

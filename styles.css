@@ -102,6 +102,13 @@ footer{align-items:center;flex-wrap:wrap}
 #study-dialog{position:fixed;inset:var(--study-top,0px) 0 auto;margin:0;width:100%;max-width:none;height:var(--study-height,100dvh);max-height:none;padding:0;border:0;border-radius:0;background:var(--paper)}
 #study-dialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto}
 .study-head{display:flex;align-items:center;gap:14px;padding:12px max(18px,env(safe-area-inset-left));border-bottom:1px solid var(--line)}
+.tabs[hidden],#study-brand[hidden],#study-mode[hidden]{display:none}
+.study-head .brand{font-size:1rem;gap:10px}
+@media(max-width:540px){.study-head .brand small{display:none}}
+.round-confetti{position:fixed;inset:0;z-index:100;pointer-events:none;overflow:hidden}
+.round-confetti span{position:absolute;left:var(--x);top:-12px;width:7px;height:11px;background:var(--color);animation:round-confetti 1.8s var(--delay) both ease-out}
+@keyframes round-confetti{to{transform:translate(var(--drift),70vh) rotate(var(--spin));opacity:0}}
+@media(prefers-reduced-motion:reduce){.round-confetti{display:none}}
 #study-mode{font-size:.92rem;line-height:1.3}.study-head-actions{margin-left:auto}#study-position{color:var(--muted);font-size:.82rem;white-space:nowrap}
 .study-close{width:48px;flex-shrink:0;font-size:1.6rem;line-height:1;padding:8px}.study-head .theme-toggle{border-color:transparent}
 #study-errors .warning{margin:0;padding:10px 18px;max-width:none;font-size:.86rem}
