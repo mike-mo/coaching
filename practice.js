@@ -2,10 +2,37 @@
 window.PRACTICE = (() => {
   const coffeeKey = "coachprep-coffee-days-v1";
   const modes = ["recall","questions","mixed","scenario","exam"];
+  const coreWords = {1:["Ethical","Practice"],2:["Coaching","Mindset"],3:["Agreements"],4:["Trust","Safety"],5:["Presence"],6:["Listens"],7:["Awareness"],8:["Client","Growth"]};
+  function recallHintState(title,hints=0,states=null) {
+    return states?[...states]:title.split(" ").map((_,i,words)=>i<Math.min(hints,words.length-1)?2:0);
+  }
+  function nextRecallHint(competency,states,kind) {
+    if(!["letter","word","core"].includes(kind))throw new Error("Invalid recall hint");
+    const words=competency.title.split(" ");
+    const index=states.findIndex((state,i)=>kind==="letter"?state===0:state!==2 && (kind!=="core" || coreWords[competency.id].includes(words[i])));
+    if(index===-1)return null;
+    const next=kind==="letter" && words[index].length>1?1:2;
+    if(next===2 && states.filter(state=>state===2).length>=words.length-1)return null;
+    return states.map((state,i)=>i===index?next:state);
+  }
+  function recallHintText(title,states,spoken=false) {
+    return title.split(" ").map((word,i)=>states[i]===2?word:states[i]===1?(spoken?`first letter ${word[0]}`:`${word[0]}...`):(spoken?"blank":"____")).join(" ");
+  }
   function recallOutcome(response) {
     if (!response) return null;
+    const expected=response.c ?? response.item?.c;
+    if(response.revealed!==true && response.matched===false && Number.isInteger(response.misplacedC) &&
+      response.misplacedC>=1 && response.misplacedC<=8 && Number.isInteger(expected) && expected>=1 && expected<=8 && response.misplacedC!==expected)return "misplaced";
     if (response.revealed === true || response.matched !== true || response.outcome === "missed") return "missed";
     return response.outcome === "unaided" ? "unaided" : "assisted";
+  }
+  function recallMisplacement(answer,competencies,normalize) {
+    if(!answer || answer.revealed===true || answer.matched!==false)return null;
+    const expected=answer.c ?? answer.item?.c;
+    if(!competencies.some(c=>c.id===expected))return null;
+    const named=competencies.find(c=>c.id===answer.misplacedC) ||
+      (typeof answer.attempt==="string"?competencies.find(c=>normalize(c.title)===normalize(answer.attempt)):null);
+    return named && named.id!==expected?named:null;
   }
   function score(outcome, seconds, bonus, cutoff) {
     if (!["recognition","reasonable","missed"].includes(outcome) || !Number.isFinite(seconds) || seconds < 0) throw new Error("Invalid practice result");
@@ -14,6 +41,12 @@ window.PRACTICE = (() => {
   }
   function points(outcome, seconds) {
     return score(outcome,seconds,14,60);
+  }
+  function recallPoints(response) {
+    if(response.revealed)return 0;
+    if(!response.matched)return response.misplacedC?1:0;
+    const hints=response.hintCount ?? 0;
+    return Math.max(1,10-(hints>0?4:0)-(hints>1?2:0)-Math.max(0,hints-2));
   }
   function earnedPoints(response) {
     return Object.hasOwn(response,"score")?response.score:score(response.outcome,response.seconds,10,64);
@@ -25,6 +58,14 @@ window.PRACTICE = (() => {
   function roundResponses(saved) {
     const session=saved.snapshot?.session;
     return saved.responses.slice(session?.roundStart || 0,session?.roundEnd);
+  }
+  function recallPercentage(saved) {
+    if(saved.mode!=="recall" || !saved.completed)return null;
+    const rows=roundResponses(saved);
+    if(rows.length!==8 || new Set(rows.map(r=>r.c)).size!==8 ||
+      rows.some(r=>r.type!=="recall" || !Number.isInteger(r.c) || r.c<1 || r.c>8 ||
+        !Object.hasOwn(r,"score") || !Number.isFinite(r.score) || r.score<0 || r.score>10))return null;
+    return Math.round(rows.reduce((sum,r)=>sum+r.score,0)/80*100);
   }
   function roundMetric(saved,examMatches=null) {
     if(saved.mode==="exam")return examMatches?.length===8?{scheme:"exam-names-v1",score:examMatches.filter(Boolean).length/8}:null;
@@ -107,8 +148,10 @@ window.PRACTICE = (() => {
     if(!p.responses.every(r=>r && Number.isInteger(r.c) && r.c>=1 && r.c<=8 &&
       ["recall","questions","scenario"].includes(r.type) && ["unaided","assisted","recognition","reasonable","missed","explored"].includes(r.outcome) &&
       Number.isFinite(r.seconds) && r.seconds>=0 && r.seconds<=1e7 &&
-      (!Object.hasOwn(r,"score") || r.type==="questions" && Number.isFinite(r.score) && r.score>=0 && r.score<=104) &&
-      (!Object.hasOwn(r,"scoreVersion") || r.type==="questions" && [1,2].includes(r.scoreVersion)) &&
+      (!Object.hasOwn(r,"misplacedC") || r.type==="recall" && Number.isInteger(r.misplacedC) && r.misplacedC>=1 && r.misplacedC<=8 && r.misplacedC!==r.c && r.matched===false && r.revealed===false) &&
+      (!Object.hasOwn(r,"hintCount") || r.type==="recall" && r.scoreVersion===2 && Number.isInteger(r.hintCount) && r.hintCount>=0 && r.hintCount<=10) &&
+      (!Object.hasOwn(r,"score") || r.type==="questions" && Number.isFinite(r.score) && r.score>=0 && r.score<=104 || r.type==="recall" && typeof r.matched==="boolean" && typeof r.revealed==="boolean" && r.score===recallPoints(r) && [1,2].includes(r.scoreVersion)) &&
+      (!Object.hasOwn(r,"scoreVersion") || r.type==="questions" && [1,2].includes(r.scoreVersion) || r.type==="recall" && [1,2].includes(r.scoreVersion) && Object.hasOwn(r,"score") && (r.scoreVersion===1 || Object.hasOwn(r,"hintCount"))) &&
       (r.type==="questions"?["recognition","reasonable","missed"]:r.type==="recall"?["unaided","assisted","missed"]:["explored"]).includes(r.outcome) &&
       (p.mode==="mixed" || r.type===p.mode || p.mode==="scenario"&&r.type==="scenario")))return false;
     const s=p.snapshot;
@@ -118,6 +161,12 @@ window.PRACTICE = (() => {
       typeof a.attempt==="string" && a.attempt.length<=10000 && Number.isInteger(a.hints) && a.hints>=0 && a.hints<=10 &&
       typeof a.done==="boolean" && typeof a.revealed==="boolean" && typeof a.assistLogged==="boolean" &&
       (!a.done || a.reported===true) &&
+      (!Object.hasOwn(a,"hintWords") || a.item.type==="recall" && Array.isArray(a.hintWords) &&
+        a.hintWords.length===data.competencies.find(c=>c.id===a.item.c).title.split(" ").length &&
+        a.hintWords.every(state=>[0,1,2].includes(state)) && a.hintWords.filter(state=>state===2).length<a.hintWords.length &&
+        (a.hints>0 || a.hintWords.every(state=>state===0)) &&
+        a.hintWords.every((state,i)=>state!==1 || data.competencies.find(c=>c.id===a.item.c).title.split(" ")[i].length>1)) &&
+      (!Object.hasOwn(a,"misplacedC") || a.item.type==="recall" && a.done && Number.isInteger(a.misplacedC) && a.misplacedC>=1 && a.misplacedC<=8 && a.misplacedC!==a.item.c && a.matched===false && a.revealed===false) &&
       (a.item.type!=="questions" || Array.isArray(a.optionOrder) && a.optionOrder.length===4 &&
         new Set(a.optionOrder).size===4 && a.optionOrder.every(i=>Number.isInteger(i) && i>=0 && i<4) &&
         (!a.done || a.selected!==null) && (a.selected===null || Number.isInteger(a.selected) && a.selected>=0 && a.selected<4));
@@ -148,5 +197,5 @@ window.PRACTICE = (() => {
     if(p.mode==="scenario" && (p.responses.length!==s.history.length+(s.branchChoice!==null?1:0) || p.completed!==(s.scenarioNode===null)))return false;
     return true;
   }
-  return {uiVersion:4,recallOutcome,points,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,coffee,validSaved};
+  return {uiVersion:6,recallOutcome,recallMisplacement,points,recallPoints,recallPercentage,recallHintState,nextRecallHint,recallHintText,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,coffee,validSaved};
 })();

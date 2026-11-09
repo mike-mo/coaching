@@ -76,7 +76,7 @@ test("primary and reinforcing citations refer to real 2025 sub-competencies", ()
 
 test("question feedback stays conditional and all four classifications have rationale rows", () => {
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
-  const question = app.slice(app.indexOf("function renderQuestion()"), app.indexOf("function nextItem()"));
+  const question = app.slice(app.indexOf("function renderQuestion("), app.indexOf("function nextItem()"));
   assert.match(question, /a\.done\?`<details class="review-question"/);
   assert.match(question, /"ABCD"\[position\]/);
   assert.match(question, /class="answer-card/);
@@ -85,4 +85,67 @@ test("question feedback stays conditional and all four classifications have rati
   assert.doesNotMatch(question, /:citation\(q\.c/);
   assert.match(app, /outcome === "reasonable"/);
   assert.match(app, /legacyQuestionIds/);
+});
+
+test("Questions and mixed feedback retain every displayed option position in saved review", () => {
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const renderer = app.slice(app.indexOf("function renderQuestion("), app.indexOf("function nextItem()"));
+  for (const mode of ["questions", "mixed"]) {
+    for (const order of [[2, 0, 3, 1], [1, 3, 0, 2]]) {
+      for (const selected of order) {
+        const q = data.questions[0], card = { innerHTML: "" }, body = { scrollTop: 200 };
+        let buttons = [], writes = 0, records = 0;
+        const a = { item: { id: q.id, type: "questions", c: q.c }, optionOrder: order, selected: null, done: false };
+        const sandbox = {
+          D: data, active: a, reviewIndex: null, session: { type: mode, answers: {} },
+          comp: id => data.competencies.find(c => c.id === id),
+          escape: value => String(value), titleLabel: c => c.title, citation: () => "",
+          updateShell: () => {}, persist: () => {}, nextItem: () => {},
+          noteActive: () => { writes++; }, record: () => { records++; }, announce: () => {},
+          focus: () => { assert.equal(body.scrollTop, 0, "Reset scroll before bringing the selected summary into view"); },
+          document: {
+            querySelector: selector => selector === "#study-card" ? card : selector === "#study-body" ? body : selector === "#next-item" ? {} : null,
+            querySelectorAll: () => {
+              buttons = a.done ? [] : order.map(i => ({ dataset: { option: String(i) } }));
+              return buttons;
+            }
+          }
+        };
+        vm.createContext(sandbox);
+        vm.runInContext(renderer, sandbox);
+        const displayedOrder = () => Array.from(card.innerHTML.matchAll(/data-(?:option|answer)="(\d)"/g), match => Number(match[1]));
+        const letters = () => Array.from(card.innerHTML.matchAll(/class="letter">([A-D])/g), match => match[1]);
+        vm.runInContext("renderQuestion()", sandbox);
+        assert.deepEqual(displayedOrder(), order);
+        const beforeLetters = letters();
+        const submit = buttons.find(b => Number(b.dataset.option) === selected).onclick;
+        submit();
+        assert.deepEqual(displayedOrder(), order);
+        assert.deepEqual(letters(), beforeLetters);
+        assert.match(card.innerHTML, /options feedback-enter/);
+        assert.equal((card.innerHTML.match(/Your choice/g) || []).length, 1);
+        assert.match(card.innerHTML, new RegExp(`selected" data-answer="${selected}"`));
+        assert.equal((card.innerHTML.match(/class="rationale-panel"/g) || []).length, 4);
+        assert.equal(a.outcome, q.options[selected][2] === "strongest" ? "recognition" : q.options[selected][2] === "reasonable" ? "reasonable" : "missed");
+        submit();
+        assert.equal(writes, 1);
+        assert.equal(records, 1, "Answers remain locked");
+        sandbox.session.answers[0] = JSON.parse(JSON.stringify(a));
+        sandbox.reviewIndex = 0;
+        vm.runInContext("renderQuestion()", sandbox);
+        assert.deepEqual(displayedOrder(), order);
+        assert.deepEqual(letters(), beforeLetters);
+        assert.doesNotMatch(card.innerHTML, /feedback-enter|data-option=/);
+        sandbox.reviewIndex = null;
+        vm.runInContext("renderQuestion()", sandbox);
+        assert.doesNotMatch(card.innerHTML, /feedback-enter/, "Resumed feedback does not replay motion");
+      }
+    }
+  }
+});
+
+test("feedback motion is brief, unstaggered and opt-in to normal motion preferences", () => {
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert.match(css, /@media\(prefers-reduced-motion:no-preference\)\{\s*\.feedback-enter .chosen-marker,.feedback-enter .result-tag,.feedback-enter .rationale-panel\{animation:question-feedback-enter 160ms ease-out\}/);
+  assert.match(css, /@keyframes question-feedback-enter\{from\{opacity:\.65;transform:translateY\(3px\)\}to\{opacity:1;transform:translateY\(0\)\}\}/);
 });

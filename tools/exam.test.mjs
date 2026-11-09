@@ -46,7 +46,7 @@ test("public entry points hide conversation and preserve exact requested home co
   assert.doesNotMatch(html,/data-view="scenario"/);
   assert.doesNotMatch(home,/data-start="scenario"|Start conversation|03 \/ CONVERSATION/);
   assert.match(home,/01 \/ CORE COMPETENCIES/);
-  assert.match(home,/Try to name each from memory, use a hint to show one word at a time, or choose Pass to see the full name\./);
+  assert.match(home,/Try to name each from memory\. First letter, Next word and Core word offer clues; Pass shows the full name\./);
   assert.match(home,/>Practice Core Competencies<\/button>/);
   assert.match(app,/Sources for this conversation/);
 });
