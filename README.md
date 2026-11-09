@@ -41,11 +41,42 @@ Open `http://127.0.0.1:8847/`. Use the local server so SVG masks and browser sto
 
 ## GitHub Pages
 
-The Pages workflow runs on pushes to `main` or a manual workflow dispatch. It copies the eight runtime files, sharing image, selected logo and favicon SVGs into a static artifact and deploys that artifact using GitHub's Pages actions.
+Pushes to any branch or tag and pull requests run read-only validation. They do not publish the site. Production deployment runs only when a stable GitHub Release is published with a unique tag in `vMAJOR.MINOR.PATCH` form, such as `v0.1.0`. Drafts, prereleases and tag pushes alone do not deploy. There is no manual deployment workflow.
 
-Enable GitHub Pages with **GitHub Actions** as the source in the repository's Settings > Pages. The deployment environment records the published URL.
+The deployment verifies that the release is still published and immutable, resolves its tag and checks out the exact event commit rather than the current branch tip. It validates that snapshot, then copies only the eight runtime files, sharing PNG, selected logo and favicon SVG into the Pages artifact. Workflow run names, summaries, asset checksums and the `github-pages` deployment history record which release and SHA were published. A release is live only after its Pages deployment succeeds.
+
+Repository settings use **GitHub Actions** as the Pages source, **Enable release immutability** for future releases, and a `github-pages` environment allowing only the tag pattern `v*`, with no branch permission. Keep these settings: immutability locks published tags/assets, and the environment blocks historical `main` deployments too.
 
 All app assets use relative URLs. The app works at a GitHub project-site subpath and does not require server-side routing. Navigation stays within the page.
+
+### Publish a version
+
+Choose a reviewed full commit SHA containing these workflows and use a new version tag. Replace the example version and SHA before running:
+
+```powershell
+$Snapshot = "REPLACE_WITH_REVIEWED_FULL_COMMIT_SHA"
+git tag -a v0.1.0 $Snapshot -m "Coachprep v0.1.0"
+git push origin refs/tags/v0.1.0
+gh release create v0.1.0 --verify-tag --draft --title "v0.1.0" --notes "Describe the changes."
+```
+
+Review the draft and attach any release assets before publishing; immutable assets cannot be changed afterward. Leave the prerelease option off, then publish in GitHub or run `gh release edit v0.1.0 --draft=false`. Confirm the matching **Deploy GitHub Pages** run succeeds and check both public URLs. Keep the release and tag as the source snapshot even after Actions artifacts expire.
+
+### Roll back
+
+Find a prior release with a successful Pages deployment and confirm its full commit SHA. Create a new, unused version tag pointing at that same commit, then publish a stable release describing the rollback. For example, after a problematic `v0.1.1`, restore the source from `v0.1.0` as `v0.1.2`:
+
+```powershell
+git fetch origin --tags
+git rev-parse 'v0.1.0^{commit}'
+git tag -a v0.1.2 'v0.1.0^{commit}' -m "Restore the v0.1.0 snapshot"
+git push origin refs/tags/v0.1.2
+gh release create v0.1.2 --verify-tag --title "v0.1.2: rollback to v0.1.0" --notes "Restore the known-good v0.1.0 snapshot."
+```
+
+This records a new publication of the old source without moving tags, reverting application commits or force-pushing history. Browser storage is not rolled back; check saved-data compatibility when choosing the target.
+
+Release tags must contain the release workflow. Older commits cannot gain a new trigger retroactively. The commit introducing this policy preserves the runtime files from the pre-release live commit `4493ca806986b429e962fa367901d4b06b1eedaa` unchanged; use that policy-enabled snapshot as the fallback for the current site. Enabling this policy does not itself create a release or change the live site.
 
 ## Site logo
 
