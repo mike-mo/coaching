@@ -5,6 +5,19 @@ const isLegacyPath = path => path === "/coaching" || path.startsWith("/coaching/
 const usageOrigin = "https://smartify.space";
 const usageModes = ["titles", "questions", "mixed", "conversation", "exam"];
 const maximumUsageBytes = 256;
+const activityLimits = { activeSeconds: 3600, answered: 256, hints: 256, passes: 256, exits: 64 };
+
+function validUsage(event) {
+  if (!event || Array.isArray(event) || !usageModes.includes(event.mode)) return false;
+  const fields = Object.keys(event).sort().join(",");
+  if (event.version === 1) return fields === "event,mode,version" && ["start", "completion"].includes(event.event);
+  if (event.version !== 2 || event.event !== "activity" ||
+      fields !== "activeSeconds,answered,event,exits,hints,mode,passes,version") return false;
+  const counters = Object.entries(activityLimits);
+  return counters.every(([key, maximum]) => Number.isInteger(event[key]) && event[key] >= 0 && event[key] <= maximum) &&
+    counters.some(([key]) => event[key] > 0) && event.passes <= event.answered &&
+    (["titles", "mixed"].includes(event.mode) || event.hints === 0 && event.passes === 0);
+}
 
 function usageResponse(message, status, headers = {}) {
   return new Response(message, {
@@ -53,8 +66,7 @@ async function collectUsage(request, env) {
   } catch {
     return usageResponse("The usage event is not valid JSON.", 400);
   }
-  if (!event || Array.isArray(event) || Object.keys(event).sort().join(",") !== "event,mode,version" ||
-      event.version !== 1 || !["start", "completion"].includes(event.event) || !usageModes.includes(event.mode)) {
+  if (!validUsage(event)) {
     return usageResponse("The usage event has unsupported fields or values.", 400);
   }
   if (typeof env?.COACHING_ENGINE?.writeDataPoint !== "function" || typeof env?.COACHING_USAGE_LIMIT?.limit !== "function") {
@@ -66,8 +78,8 @@ async function collectUsage(request, env) {
     if (!success) return usageResponse("Usage statistics are temporarily busy.", 429, { "Retry-After": "60" });
     env.COACHING_ENGINE.writeDataPoint({
       indexes: [`${event.event}:${event.mode}`],
-      blobs: [event.event, event.mode, "1"],
-      doubles: [1]
+      blobs: [event.event, event.mode, String(event.version)],
+      doubles: event.version === 1 ? [1] : [1, event.activeSeconds, event.answered, event.hints, event.passes, event.exits]
     });
   } catch {
     console.error("Study usage write failed.");

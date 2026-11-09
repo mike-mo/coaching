@@ -70,6 +70,10 @@
   function elapsed(){return (flow?.elapsedMs || 0)+(clockStarted===null?0:performance.now()-clockStarted);}
   function answerTime(){return (flow?.answerMs || 0)+(answerStarted===null?0:performance.now()-answerStarted);}
   function isReview(){return reviewIndex!==null || flow?.examReview===true;}
+  function syncUsage(){
+    usage?.setActive?.(dialog.open && modalStarted && flow && !flow.completed && !isReview() &&
+      !finishPracticeEntry && !finishShellClose && clockStarted!==null?usageMode(flow.mode):null);
+  }
   function snapshot(){
     return {view,session,active,reviewIndex,scenarioNode,history:history.map(h=>({node:h.node,index:D.scenario.nodes[h.node].choices.indexOf(h.choice)})),branchChoice};
   }
@@ -83,6 +87,7 @@
   function pause(){
     if(!flow)return;
     flow.elapsedMs=elapsed();flow.answerMs=answerTime();clockStarted=null;answerStarted=null;
+    syncUsage();
   }
   function openShell(){
     finishShellClose?.();
@@ -119,6 +124,7 @@
   }
   function noteResponse(item,outcome,extra={}){
     if(!flow)return;
+    usage?.count?.(usageMode(flow.mode),"answered");
     const seconds=answerTime()/1000;
     flow.responses.push({c:item.c,type:item.type,outcome,seconds,...extra,...(item.type==="questions"?{score:P.points(outcome,seconds),scoreVersion:2}:item.type==="recall"?{score:P.recallPoints(extra),scoreVersion:2}:{})});
     flow.answerMs=0;answerStarted=null;
@@ -183,6 +189,7 @@
       if(!dialog.open || finishShellClose || !enteredFlow || flow!==enteredFlow || flow.completed || isReview())return;
       if(resumeClock && clockStarted===null)clockStarted=performance.now();
       if(resumeAnswer && active===enteredActive && !active.done && answerStarted===null)answerStarted=performance.now();
+      syncUsage();
     };
     finishPracticeEntry=finish;
     const target=kind==="intro"?dialog:document.querySelector("#study-card") || main;
@@ -250,9 +257,11 @@
     const completion=recordCompletion();
     if(!save()){
       if(completion){state.previousRounds=completion.old;state.completedModes=completion.oldModes;flow.completionRecorded=false;stash();}
-      if(flow && !isReview() && !flow.completed){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}return;
+      if(flow && !isReview() && !flow.completed){clockStarted=performance.now();if(active && !active.done || view==="scenario" && branchChoice===null)answerStarted=performance.now();}
+      syncUsage();return;
     }
     const result=flow || {mode:introMode || view,elapsedMs:0,responses:[],completed:false};
+    if(flow && !flow.completed)usage?.leave?.(usageMode(flow.mode));
     closeShell(()=>{
       returnView=null;reviewIndex=null;
       view="home";updateNavigation();
@@ -376,6 +385,7 @@
       [...dock.children].sort((a,b)=>slot(a)-slot(b)).forEach(button=>dock.append(button));
     }
     stash();
+    syncUsage();
   }
   function viewAnswer(index){
     if(!session?.answers?.[index]){announce("This earlier answer was not saved for review.");return;}
@@ -410,7 +420,7 @@
   }
   function examReview(open){
     if(flow?.mode!=="exam" || state.exam?.status!=="draft" || open===!!flow.examReview)return;
-    pause();flow.examReview=open;if(!open)clockStarted=performance.now();persist();
+    pause();flow.examReview=open;if(!open)clockStarted=performance.now();syncUsage();persist();
   }
   document.querySelector("#close-study").onclick=closeStudy;
   function viewportSize(){
@@ -561,7 +571,10 @@
       if(flow?.mode==="exam"){
         pause();flow.elapsedMs=state.exam.elapsedMs;flow.completed=true;
         const completion=recordCompletion();
-        if(completion && persist()){usage?.complete("exam");if(completion.celebrate)confetti();}
+        if(completion && persist()){
+          usage?.count?.("exam","answered",state.exam.answers.filter(a=>a.title.trim()||a.bullets.some(b=>b.trim())).length);
+          usage?.complete("exam");if(completion.celebrate)confetti();
+        }
         else if(completion){state.previousRounds=completion.old;state.completedModes=completion.oldModes;flow.completionRecorded=false;stash();}
       }
     },onFinished:()=>{if(view==="home")renderHome();},
@@ -744,6 +757,7 @@
       const next=P.nextRecallHint(c,a.hintWords,button.dataset.hint);
       if(!next)return;
       const selection={start:input.selectionStart,end:input.selectionEnd,direction:input.selectionDirection,scrollLeft:input.scrollLeft};
+      usage?.count?.(usageMode(flow.mode),"hints");
       a.hintWords=next;a.hints++; if(!a.assistLogged){record(a.item.id,"assisted"); a.assistLogged=true;}
       renderRecall();
       const restored=document.querySelector("#recall-input");restored.focus();
@@ -754,6 +768,7 @@
       if(a.done)return;
       a.revealed=true;a.done=true;a.outcome="assisted";
       noteActive();
+      usage?.count?.(usageMode(flow.mode),"passes");
       if(!a.assistLogged){record(a.item.id,"assisted");a.assistLogged=true;}
       if (!session) usage?.item("titles",a.item.id,D.competencies.length);
       renderRecall();focusRecallContinue();announce(`Wrong / passed. The official name is ${titleLabel(c)}.`);

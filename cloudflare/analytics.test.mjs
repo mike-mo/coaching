@@ -38,6 +38,54 @@ test("valid events write only approved enums and constants, never browser attrib
   assert.doesNotMatch(JSON.stringify(points), /private|192\.0\.2/);
 });
 
+const activity = { version: 2, event: "activity", mode: "mixed", activeSeconds: 30, answered: 3, hints: 2, passes: 1, exits: 1 };
+test("v2 activity deltas use a distinct schema while preserving the original dataset and limiter", async () => {
+  const points=[];
+  for(const mode of ["titles","questions","mixed","conversation","exam"]){
+    const data={...activity,mode,...(!["titles","mixed"].includes(mode)?{hints:0,passes:0}:{})};
+    const response=await worker.fetch(request(data,{headers:{Cookie:"private",Authorization:"private","CF-Connecting-IP":"192.0.2.1"}}),binding(points));
+    assert.equal(response.status,204);
+    assert.deepEqual(points.at(-1),{indexes:[`activity:${mode}`],blobs:["activity",mode,"2"],
+      doubles:[1,30,3,data.hints,data.passes,1]});
+  }
+  assert.doesNotMatch(JSON.stringify(points),/private|192\.0\.2/);
+  const maximum={...activity,activeSeconds:3600,answered:256,hints:256,passes:256,exits:64};
+  assert.ok(new TextEncoder().encode(JSON.stringify(maximum)).length<=256);
+  assert.equal((await worker.fetch(request(maximum),binding(points))).status,204);
+});
+test("v2 accepts only bounded integer deltas and rejects empty, inconsistent and extra fields",async()=>{
+  const points=[];
+  const invalid=[
+    {...activity,version:1},{...activity,version:"2"},{...activity,event:"start"},{...activity,mode:"recall"},
+    {...activity,activeSeconds:3601},{...activity,activeSeconds:0.1},{...activity,activeSeconds:-1},
+    {...activity,answered:257},{...activity,hints:257},{...activity,passes:257},{...activity,exits:65},
+    {...activity,answered:0},{...activity,answered:"3"},{...activity,hints:null},
+    {...activity,mode:"exam"},{...activity,mode:"questions"},{...activity,mode:"conversation"},
+    {...activity,answer:"private"},{...activity,session:"private"},{...activity,score:1},
+    {...activity,activeSeconds:0,answered:0,hints:0,passes:0,exits:0}
+  ];
+  for(const field of ["activeSeconds","answered","hints","passes","exits"]){
+    const missing={...activity};delete missing[field];invalid.push(missing);
+  }
+  for(const data of invalid)assert.equal((await worker.fetch(request(data),binding(points))).status,400,JSON.stringify(data));
+  assert.equal(points.length,0);
+  for(const field of ["activeSeconds","answered","hints","exits"]){
+    const data={...activity,activeSeconds:0,answered:0,hints:0,passes:0,exits:0,[field]:1};
+    assert.equal((await worker.fetch(request(data),binding(points))).status,204);
+  }
+});
+test("v2 retains same-origin, byte limits, no-read/no-CORS and one shared nonidentifying limiter",async()=>{
+  const points=[];
+  assert.equal((await worker.fetch(request(activity,{headers:{Origin:"https://mike-mo.github.io"}}),binding(points))).status,403);
+  assert.equal((await worker.fetch(request(JSON.stringify(activity).padEnd(257)),binding(points))).status,413);
+  const env=binding(points);env.COACHING_USAGE_LIMIT.limit=async input=>{
+    assert.deepEqual(input,{key:"coaching-usage"});return{success:false};
+  };
+  const response=await worker.fetch(request(activity),env);
+  assert.equal(response.status,429);assert.equal(response.headers.get("access-control-allow-origin"),null);
+  assert.equal(points.length,0);
+});
+
 test("collector denies missing, wrong, Pages and HTTP origins without forwarding", async t => {
   const points = [];
   const network = t.mock.method(globalThis, "fetch", () => { throw new Error("Must not proxy"); });

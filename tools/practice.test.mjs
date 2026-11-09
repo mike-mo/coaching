@@ -353,7 +353,9 @@ test("recall feedback focuses Continue and echoes only wrong submitted answers",
       const input={value:kind.includes("misplaced")?D.competencies[1].title:kind.includes("wrong")?"A fictional guess":c.title,
         setCustomValidity:()=>{},reportValidity:()=>{},focus:()=>{focused="input";}};
       const form={},next={focus:()=>{focused="continue";}},pass={};
+      const counts=[];
       const sandbox={P,D,active:a,reviewIndex:null,session:{type:mode},state:{items:{r1:{due:0,missed:0}},hintedSuccessIndex:0},
+        flow:{mode},usageMode:value=>value,usage:{count:(...args)=>counts.push(args)},
         comp:()=>c,titleLabel:context.window.EXAM.titleLabel,normalizeTitle:context.window.EXAM.normalizeTitle,
         escape:value=>value,citation:()=>"",hintedSuccessMessages:["You got it!"],hintedSuccessSupport:"Keep practicing.",
         updateShell:()=>{},persist:()=>{},record:()=>{},noteActive:()=>{},nextItem:()=>{},
@@ -369,6 +371,7 @@ test("recall feedback focuses Continue and echoes only wrong submitted answers",
       else form.onsubmit({preventDefault:()=>{prevented=true;}});
       assert.equal(focused,"continue");
       assert.equal(a.done,true);
+      assert.deepEqual(counts,kind.includes("pass")?[[mode,"passes"]]:[]);
       if(!kind.includes("pass"))assert.equal(prevented,true);
       assert.equal((card.innerHTML.match(/class="answer-title"/g) || []).length,1);
       if(kind.includes("wrong") || kind.includes("misplaced"))assert.match(card.innerHTML,/Your answer:/);
@@ -422,14 +425,19 @@ test("hint rerenders preserve caret, backward selection and horizontal input scr
       const input={selectionStart:range[0],selectionEnd:range[1],selectionDirection:range[2],scrollLeft:27};
       const a={item:{id:"r1"},done:false,hints:0,hintWords:[0,0,0]},button={dataset:{hint:kind}};
       const calls=[],restored={focus:()=>calls.push("focus"),setSelectionRange:(...args)=>calls.push(args)};
-      const sandbox={P,a,input,c:D.competencies[0],record:()=>{},renderRecall:()=>calls.push("render"),announce:()=>{},
+      let hintCount=0;
+      const sandbox={P,a,input,c:D.competencies[0],flow:{mode:"recall"},usageMode:()=>"titles",
+        usage:{count:(mode,field)=>{assert.equal(mode,"titles");assert.equal(field,"hints");hintCount++;}},
+        record:()=>{},renderRecall:()=>calls.push("render"),announce:()=>{},
         document:{querySelectorAll:()=>[button],querySelector:()=>restored}};
       vm.createContext(sandbox);vm.runInContext(handler,sandbox);button.onclick();
       assert.equal(a.hints,1);
+      assert.equal(hintCount,1);
       assert.deepEqual(calls,["render","focus",range]);
       assert.equal(restored.scrollLeft,27);
       a.hintWords=[1,2,2];button.dataset.hint="core";button.onclick();
       assert.equal(a.hints,1,"Exhausted hints do not rerender or disturb selection");
+      assert.equal(hintCount,1,"No-op hints do not emit analytics counts");
       assert.equal(calls.length,3);
     }
   }
@@ -552,7 +560,7 @@ test("study toolbar keeps Back, Pass/Next and Submit/Continue/Return in fixed sl
       dialog:{open:true,setAttribute:()=>{}},flow:{mode:questions?"questions":"recall",completed},introMode:null,view:questions?"questions":"recall",
       modeNames:{recall:"Core competency recall",questions:"Questions"},modalStarted:true,introBrand:{},session:{index,items:[1,2,3,4],roundEnd:4,answers:Object.fromEntries(Array.from({length:index},(_,i)=>[i,{}]))},
       reviewIndex,active:{done,item:{type:questions?"questions":"recall"}},finishPracticeEntry:null,answerStarted:null,performance:{now:()=>1},
-      isReview:()=>reviewIndex!==null,elapsed:()=>12000,P,stash:()=>{},viewAnswer:()=>{},resumeCurrent:()=>{},
+      isReview:()=>reviewIndex!==null,elapsed:()=>12000,P,stash:()=>{},syncUsage:()=>{},viewAnswer:()=>{},resumeCurrent:()=>{},
       document:{querySelector:s=>controls[s],createElement:()=>node()}};
     vm.createContext(sandbox);vm.runInContext(renderer,sandbox);vm.runInContext("updateShell()",sandbox);
     return {dock,header,submit};
@@ -591,7 +599,7 @@ test("lifecycle motion excludes entry time and safely completes downward closure
   const dialog={open:true,inert:false,animate,close(){this.open=false;closed++;}};
   const sandbox={dialog,navigationMotion,practiceMotion:{duration:240,easing:"cubic-bezier(.22,.61,.36,1)"},
     entryTransition:null,studyTransition:null,finishPracticeEntry:null,finishShellClose:null,
-    flow:null,active:null,clockStarted:null,answerStarted:null,performance:{now:()=>now},isReview:()=>false,
+    flow:null,active:null,clockStarted:null,answerStarted:null,performance:{now:()=>now},isReview:()=>false,syncUsage:()=>{},
     document:{querySelector:()=>({animate}),body:{classList:{remove:()=>{}}}},main:{},moved:[],homeAnchor:{after:()=>{}},
     pause:()=>{sandbox.clockStarted=null;sandbox.answerStarted=null;},afterClose:()=>{restored++;}};
   vm.createContext(sandbox);vm.runInContext(helpers,sandbox);

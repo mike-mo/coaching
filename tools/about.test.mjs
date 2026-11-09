@@ -16,7 +16,8 @@ test("About is concise, attributed and transparent without scoring or donation e
   assert.match(about,/without guarantees of accuracy or suitability/);
   assert.match(about,/exam answers stay in this browser/);
   assert.match(about,/Cloudflare collects page-visit and performance stats/);
-  assert.match(about,/never answers or scores/);
+  assert.match(about,/no answer text, scores or tracking identifiers/);
+  assert.match(about,/foreground practice time within one minute of an interaction/);
   assert.doesNotMatch(about,/coffee|visiting day|Not now|speed points|90 points|10 minutes|1, 3,/i);
 });
 test("About retains accessible X, theme and privacy controls with focus restoration",()=>{

@@ -10,6 +10,8 @@
 | Route | `smartify.space/coachprep*` |
 | Compatibility date | `2026-11-07` |
 | Main module | `cloudflare/worker.mjs` |
+| Collector version | `9ca7ce71-3290-4cb7-b58d-a563e4fcfa46` |
+| Collector activated (UTC) | `2026-11-09T05:25:42.536701Z` |
 
 The site's firewall must allow public GET/HEAD requests to host `smartify.space` for exactly `/coachprep` and `/coachprep/` descendants. Usage events also require a POST exception for exactly `https://smartify.space/coachprep/analytics`, with no query string. Keep these exceptions limited to the host, method and path boundary. Other paths and security rules retain their existing behavior, including bot blocking.
 
@@ -51,7 +53,7 @@ First enable Analytics Engine from **Workers & Pages > Analytics Engine** in the
 
 The limiter uses the constant key `coaching-usage`, shared across this endpoint's visitors. It uses no IP, user identifier or fingerprint. Limits are approximate per Cloudflare location, not a strict worldwide quota. Busy requests return 429 and the browser does not retry them. Verify binding availability on the existing Free plan before deployment; do not upgrade if unavailable. Analytics Engine's documented Free limits are 100,000 points and 10,000 reads per day, with three-month retention. Monitor quotas rather than assuming unlimited capacity.
 
-The collector accepts only HTTPS POST requests with the exact same-origin `Origin`, `application/json` (optionally UTF-8), no query string, at most 256 UTF-8 bytes, and exactly:
+The collector accepts only HTTPS POST requests with the exact same-origin `Origin`, `application/json` (optionally UTF-8), no query string and at most 256 UTF-8 bytes. The original lifecycle schema is exactly:
 
 ```json
 {"version":1,"event":"start","mode":"questions"}
@@ -59,19 +61,84 @@ The collector accepts only HTTPS POST requests with the exact same-origin `Origi
 
 `event` is `start` or `completion`. `mode` is `titles`, `questions`, `mixed`, `conversation` or `exam`. Invalid requests return 400, 403, 405 or 413. Missing/failing bindings return 503. A 204 acknowledges a validated, rate-permitted call to the synchronous Analytics Engine write API, not proof of later delivery. No CORS is exposed and the Pages browser does not send events.
 
-Each point contains only `blobs: [event, mode, "1"]`, `doubles: [1]` and the enum-based index `event:mode`. Invalid payloads and client attributes are never logged or copied into points. There is no analytics read route.
+Version-1 points contain only `blobs: [event, mode, "1"]`, `doubles: [1]` and the enum-based index `event:mode`. The version-2 schema is documented below. Invalid payloads and client attributes are never logged or copied into points. There is no analytics read route.
 
 ## What the counters mean
 
 | Mode | Start | Completion |
 | --- | --- | --- |
 | Names (`titles` event enum) | Start a new eight-item round, after its introduction | All eight names in that saved round have been submitted or passed; hints alone do not finish it |
-| Questions | Start a new 32-question round, after its introduction | All questions in that saved round have been answered |
+| Questions | Start a new eight-item round, after its introduction | All questions in that saved round have been answered |
 | Mixed | Explicit round start | All items in the existing round have been finished |
 | Conversation | Explicit entry/restart | The existing final branch transitions to its review |
 | Exam | A new rehearsal is successfully saved | A saved draft transitions to submitted or expired, including after resuming it |
 
 Renders, introductions, next-item clicks alone and unfinished-session exits do not send completion events. Saved rounds can finish across visits. Resuming a saved practice or exam does not send another start; a later real finish can send its completion. Finished-review visits do not finish a session again. Failed storage, privacy changes, rate limits, blocking or network loss can leave starts without completions or completions without a visible start. These counters are not unique-person counts, assessment results or a funnel guaranteed to balance. The client does not retry and never delays studying for analytics.
+
+## Aggregate activity extension
+
+This extension requires a separate compatible Worker update followed by an app release. A commit or local preview does not activate collection. It keeps existing version-1 events and points unchanged and accepts one additional strict schema:
+
+```json
+{"version":2,"event":"activity","mode":"mixed","activeSeconds":30,"answered":3,"hints":2,"passes":1,"exits":1}
+```
+
+All eight fields are required; no others are accepted. `event` must be `activity`, and `mode` uses the existing five-value enum. Counters are integers, at least one must be positive, and `passes` cannot exceed `answered`. The same 256-byte UTF-8 limit, exact same-origin HTTPS checks, content type, nonidentifying limiter and no-CORS/no-read behavior apply.
+
+| Field | Bounds per point | Meaning |
+| --- | --- | --- |
+| `activeSeconds` | 0-3600 | Whole seconds of eligible foreground practice since the previous attempted checkpoint for this mode, with subsecond remainder retained in memory |
+| `answered` | 0-256 | New submitted recall names (including Pass), selected question responses or conversation choices; for exam, the number of competencies with any writing when a rehearsal is successfully finished |
+| `hints` | 0-256 | Successful information-revealing recall hint presses, across all three hint types; no disabled/no-op presses |
+| `passes` | 0-256 | Recall Pass actions, also included in `answered` |
+| `exits` | 0-64 | Explicit closures of unfinished practice that had entered an eligible practice view in this document; repeated close callbacks and history-only visits do not add another exit |
+
+Hints and Pass are allowed only for `titles` and `mixed`. These counters disclose neither which competency was attempted nor whether a submitted answer was correct. Exam answered counts measure written competencies on submission, not keystrokes, individual text fields or graded answers. In Mixed, `answered` includes both item types; there is no per-item or per-content breakdown.
+
+### Active-time accounting
+
+Eligibility requires a started, unfinished practice modal with its study clock running, no lifecycle animation, and no previous-answer or exam previous-pass review. Normal current-answer feedback is part of practice; completed results and completed historical review are not. The document must also be visible and focused. A study interaction (trusted pointer, keyboard or input event within the practice/confirmation dialog) opens a 60-second active window. Starting/resuming a practice view also opens that window. Repeated renders do not refresh it. Reading longer than one minute without interaction stops adding time until another interaction.
+
+This is a bounded foreground-activity estimate, not attention, learning quality or all elapsed practice time. It does not change the app's existing study, answer or exam clocks. Background/hidden intervals, introductions, home and summaries are excluded. Timer suspension is accounted using the monotonic clock and the interaction deadline rather than a count of timer callbacks.
+
+### Checkpoints, duplicates and delivery limits
+
+Pending deltas live only in document memory. The client checks every 60 seconds and also on blur, hide, pagehide, explicit unfinished closure and real completion. Per document, it attempts no more than one activity request per mode per rolling minute (at most five across all modes); throttled deltas wait for a later checkpoint while that document survives. The existing shared Worker limit remains 100 requests per 60 seconds, including legacy events. Multiple tabs and visitors still share that nonidentifying bucket, so busy periods can undercount.
+
+Counters are drained before sending with credential-free, no-referrer `fetch(..., {keepalive:true})`. Duplicate lifecycle callbacks cannot resend those deltas. There are no retries, analytics localStorage records, event IDs, stable user/session IDs or offline queues. An ambiguous network failure is not retried because the server may already have written the point. No network-level exactly-once guarantee is claimed; repeated independently supplied requests are indistinguishable and remain subject to the existing limiter.
+
+Pagehide flushes available deltas but does not increment `exits`: browsers cannot reliably distinguish tab close, reload, navigation and back/forward caching. Abrupt termination, unavailable unload delivery, subsecond remainder, a pending rate-budgeted delta at unload, privacy suppression, blockers, network errors, saturation or the shared limiter can all lose data. Non-204 responses and detectable dispatch failures mark usage stats incomplete in Sources & about and log a generic warning, never payloads. Counters saturate at the bounds above with the same warning rather than growing an unbounded queue. A 204 still acknowledges the synchronous write API, not later Analytics Engine persistence.
+
+Reload/resume starts measuring only future work, without replaying saved hint counts, submitted responses or old elapsed time. Answer counts are submission observations, not distinct saved items; actually resubmitting after lost storage can count again. Existing start/completion semantics stay unchanged. Real completion after resuming may therefore appear without a start in the observed period. Opt-out, DNT/GPC and unavailable preferences discard unsent deltas and stop collection; opting back in does not backfill suppressed time. `exits` are explicit close actions, not abandoned sessions or people.
+
+### Dataset and activation
+
+Version-2 points use `indexes: ["activity:mode"]`, `blobs: ["activity", mode, "2"]` and `doubles: [1, activeSeconds, answered, hints, passes, exits]`. `double1` is checkpoint count, not practice sessions. Existing version-1 queries continue to work unchanged when filtering `blob3 = '1'`. Do not infer unique users, pair starts/completions into a funnel, or equate beacon counts with these counters.
+
+After approval, deploy in this order:
+
+1. Deploy the reviewed Worker source first, retaining both existing routes, bindings, limiter, DNS, HTML/beacon settings and firewall rules. It accepts both old v1 clients and new v2 clients; no dataset migration is required.
+2. Publish the reviewed app snapshot through a new immutable stable release using the existing release-only procedure. The local source references `analytics.js?v=3` and `app.js?v=28`. Releasing the client before updating the Worker would reject v2 requests rather than collect them.
+3. Read back aggregate rows after ordinary consenting usage. Keep dashboard credentials, snapshots and read queries private. An empty query is no evidence of active users, engagement or a working matched funnel.
+
+For rollback, restore the client first through a new immutable stable release using a known-good earlier app snapshot. Keep this backward-compatible collector deployed while old and new browser tabs coexist. Do not remove v2 acceptance while cached v2 clients can still send; those clients would receive explicit delivery failures. Existing points remain in the dataset regardless of which client is live. Any later collector rollback is a separate approved operation and must retain the existing bindings, routes and limiter.
+
+Aggregate totals for the new observations:
+
+```sql
+SELECT blob2 AS mode,
+       SUM(_sample_interval * double2) AS foreground_active_seconds,
+       SUM(_sample_interval * double3) AS answered_items,
+       SUM(_sample_interval * double4) AS hint_uses,
+       SUM(_sample_interval * double5) AS passes,
+       SUM(_sample_interval * double6) AS partial_close_actions
+FROM coaching_events
+WHERE blob1 = 'activity' AND blob3 = '2'
+  AND timestamp >= NOW() - INTERVAL '7' DAY
+GROUP BY mode
+```
+
+The timestamp is ingestion time. A checkpoint may cover earlier work, possibly from several short visits in the same document. Use weighted sums because the dataset can sample; do not treat row counts as sessions or use these aggregate totals to calculate per-person engagement.
 
 ## Aggregate study queries
 
