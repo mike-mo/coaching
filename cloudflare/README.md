@@ -32,7 +32,7 @@ Upstream status, content, content type and caching headers pass through. HTML re
 
 Relative redirects that resolve to the upstream's `/coachprep` path, and absolute redirects to that same origin and path, point back to the custom site. Other redirects are preserved. Network failures are logged and return an uncacheable 502; unrelated-origin passthrough errors are left to Cloudflare's normal handling.
 
-These Worker files and tests are excluded from the GitHub Pages artifact, which includes only the seven runtime files and sharing PNG. Deploy the Worker separately whenever its source changes.
+These Worker files and tests are excluded from the GitHub Pages artifact, which includes only the eight runtime files, sharing PNG, selected logo and favicon SVGs. Pages publishes stable releases using the [release and rollback procedure](../README.md#github-pages). Worker deployment remains separate whenever its source changes.
 
 ## Analytics setup
 

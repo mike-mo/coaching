@@ -1,14 +1,12 @@
 name: Deploy GitHub Pages
+run-name: Publish ${{ github.event.release.tag_name }} at ${{ github.sha }}
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  release:
+    types: [published]
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -16,13 +14,69 @@ concurrency:
 
 jobs:
   deploy:
+    if: >-
+      github.event_name == 'release' &&
+      github.event.action == 'published' &&
+      !github.event.release.draft &&
+      !github.event.release.prerelease
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Check out
+      - name: Verify published release snapshot
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const requested = context.payload.release;
+            if (context.eventName !== "release" || context.payload.action !== "published" ||
+                !requested || requested.draft !== false || requested.prerelease !== false) {
+              throw new Error("Only a published stable release may deploy.");
+            }
+            const tag = requested.tag_name;
+            if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag) ||
+                context.ref !== `refs/tags/${tag}` || !/^[a-f0-9]{40}$/.test(context.sha) ||
+                !Number.isSafeInteger(requested.id) || requested.id <= 0) {
+              throw new Error("Expected a version tag vMAJOR.MINOR.PATCH and its exact commit.");
+            }
+            const {data: release} = await github.rest.repos.getRelease({
+              ...context.repo, release_id: requested.id
+            });
+            if (release.tag_name !== tag || release.draft !== false ||
+                release.prerelease !== false || !release.published_at || release.immutable !== true) {
+              throw new Error("The release must still be published, stable and immutable.");
+            }
+            const {data: commit} = await github.rest.repos.getCommit({
+              ...context.repo, ref: `refs/tags/${tag}`
+            });
+            if (commit.sha !== context.sha) {
+              throw new Error("The release tag no longer matches the event commit.");
+            }
+            core.setOutput("sha", commit.sha);
+            await core.summary
+              .addHeading("Release snapshot")
+              .addTable([
+                [{data: "Tag", header: true}, {data: "Commit", header: true}],
+                [tag, commit.sha]
+              ])
+              .addLink("GitHub Release", release.html_url)
+              .write();
+      - name: Check out released commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate released snapshot
+        run: node --test tools/*.test.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Prepare static files
@@ -33,6 +87,12 @@ jobs:
           cp assets/share-card.png _site/assets/
           cp assets/coachprep-logo.svg _site/assets/
           cp assets/favicon.svg _site/assets/
+      - name: Record asset checksums
+        run: |
+          echo '### Runtime asset SHA-256 checksums' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          (cd _site && find . -type f -print0 | sort -z | xargs -0 sha256sum) >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
