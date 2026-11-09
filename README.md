@@ -47,6 +47,8 @@ Submit, Pass and navigation stay in the shared bottom toolbar. Questions retain 
 
 Recall hints use compact, intrinsic-width controls with 44px minimum touch targets. Supporting citations, help, elapsed time and secondary toolbar actions use smaller, lower-contrast text while retaining accessible contrast in both themes. Correct recall feedback shows the expected official name without repeating the submitted answer; wrong and misplaced guesses retain the comparison. Submitting or choosing Pass focuses Continue. A separate Enter advances, while held-key repeats cannot skip feedback. Returning to current recall feedback or resuming it also restores focus to Continue; historical review focuses the expected name instead.
 
+Hint reveals preserve the answer's caret and text selection. Programmatic focus leaves native controls in the Tab order; returning to answered Questions focuses the selected response's visible summary. Changes to saved progress in another tab refresh idle home/results views and invalidate stale review actions. An open practice draft stays visible with a conflict warning instead of being overwritten; copy any needed work before refreshing.
+
 Immediate recall feedback and saved review use the same actual-result priority as the closing summary: correct without hints is green, correct with hints is yellow, and incorrect guesses or Pass are red and labeled Wrong / passed, even after hints. Recognized names in the wrong position stay distinct with a yellow, non-success order marker. Labels and icons accompany color; assistance alone never produces a success state.
 
 ## Run locally

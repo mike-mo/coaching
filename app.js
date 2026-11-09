@@ -153,6 +153,7 @@
     if(saved && !saved.completed && (mode!=="exam" || state.exam)){
       beginFlow(mode,saved);render();
       if(reviewIndex===null && active?.done && active.item.type==="recall")focusRecallContinue();
+      else if(reviewIndex===null && active?.done && active.item.type==="questions")focus(".answer-card.selected summary",true);
       else focus(".scenario-prompt,.recall-prompt,h1,.answer-card.selected summary",true);
       animatePracticeEntry("start");
       return;
@@ -234,8 +235,11 @@
       const previous=returnView;returnView=null;
       closeShell(()=>{
         main.replaceChildren(previous.nodes);
-        ({view,session,active,flow,reviewIndex,scenarioNode,history,branchChoice,introMode}=previous);
-        if(view==="home" && !main.querySelector(".session-summary") && previous.examAtOpen!==state.exam)renderHome();
+        if(previous.stale){view="home";session=null;active=null;flow=null;reviewIndex=null;introMode=null;renderHome();}
+        else {
+          ({view,session,active,flow,reviewIndex,scenarioNode,history,branchChoice,introMode}=previous);
+          if(view==="home" && !main.querySelector(".session-summary") && previous.examAtOpen!==state.exam)renderHome();
+        }
         clockStarted=null;answerStarted=null;updateNavigation();
         (launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus({preventScroll:true});
         window.scrollTo(0,previous.scrollY);
@@ -296,9 +300,16 @@
     const reviewSession=result.snapshot?.session;
     const reviewable=Object.keys(reviewSession?.answers || {}).map(Number).filter(i=>i>=(reviewSession.roundStart || 0) && i<=reviewSession.index);
     if(reviewable.length){
+      const savedRound=state.practices[result.mode];
       const reviewButton=document.createElement("button");reviewButton.id="review-round";reviewButton.textContent="Review your answers";
       reviewButton.onclick=()=>{
-        const saved=JSON.parse(JSON.stringify(state.practices[result.mode]));
+        let unchanged;
+        try {unchanged=localStorage.getItem(KEY)===lastStored;}
+        catch {storageError("Your browser couldn't open saved progress. Keep this tab open and try again.");return;}
+        if(!savedRound || state.practices[result.mode]!==savedRound || !unchanged){
+          refreshStoredProgress();return;
+        }
+        const saved=JSON.parse(JSON.stringify(savedRound));
         saved.snapshot.reviewIndex=Math.max(...reviewable);
         openShell();beginFlow(result.mode,saved,false);
         viewAnswer(Math.max(...reviewable));
@@ -382,9 +393,11 @@
     reviewIndex=null;clockStarted=performance.now();answerStarted=active && !active.done?performance.now():null;
     renderStudy();
     if(active?.done && active.item.type==="recall")focusRecallContinue();
-    else focus("#recall-input,.scenario-prompt,#study-card h3");
+    else if(active?.done && active.item.type==="questions")focus(".answer-card.selected summary",true);
+    else focus("#recall-input,.scenario-prompt,#study-card h3",true);
     animateStudyNavigation(from,session.index);
     persist();
+    announce("Returned to your current item.");
   }
   function animateStudyNavigation(from,to){
     finishPracticeEntry?.();
@@ -420,12 +433,22 @@
   window.addEventListener("pagehide",()=>{if(dialog.open){finishPracticeEntry?.();pause();persist();}});
   window.addEventListener("beforeunload",event=>{if(dialog.open && !persist()){event.preventDefault();event.returnValue="";}});
   window.addEventListener("storage",event=>{
-    if(event.key===KEY){
-      if(dialog.open && flow){saveFailed=true;storageError("Study data changed in another tab. Keep this tab open and copy any work you need before refreshing. This tab will not overwrite the other tab's saved work.");}
-      else state=load();
-    }
+    if(event.key===KEY || event.key===null)refreshStoredProgress();
     if(event.key===coffee.key && document.querySelector("#coffee-reminder") && !coffee.eligible())document.querySelector("#coffee-reminder").remove();
   });
+
+  function refreshStoredProgress(){
+    if(dialog.open && flow){
+      saveFailed=true;storageError("Study data changed in another tab. Keep this tab open and copy any work you need before refreshing. This tab will not overwrite the other tab's saved work.");return;
+    }
+    state=load();
+    if(returnView)returnView.stale=true;
+    if(!dialog.open){
+      flow=null;session=null;active=null;reviewIndex=null;introMode=null;view="home";
+      renderHome();focus();
+    }
+    announce("Study progress changed in another tab. Saved results have been refreshed.");
+  }
 
   function storageError(message) {
     if(warning.hidden || warning.textContent !== message){
@@ -522,7 +545,10 @@
   const announce = text => { document.querySelector("#announcement").textContent = text; };
   function focus(selector = "h1", ensureVisible = false) {
     const el = [...main.querySelectorAll(selector)].find(element=>element.getClientRects().length);
-    if (el) { el.setAttribute("tabindex","-1"); el.focus(); if(ensureVisible)el.scrollIntoView({block:"nearest",behavior:"instant"}); }
+    if (el) {
+      if(!el.matches("input,button,select,textarea,summary,a[href],[tabindex],[contenteditable='true']"))el.setAttribute("tabindex","-1");
+      el.focus(); if(ensureVisible)el.scrollIntoView({block:"nearest",behavior:"instant"});
+    }
   }
   const normalizeTitle = window.EXAM.normalizeTitle;
   const titleLabel = window.EXAM.titleLabel;
@@ -717,8 +743,12 @@
       if(a.done)return;
       const next=P.nextRecallHint(c,a.hintWords,button.dataset.hint);
       if(!next)return;
+      const selection={start:input.selectionStart,end:input.selectionEnd,direction:input.selectionDirection,scrollLeft:input.scrollLeft};
       a.hintWords=next;a.hints++; if(!a.assistLogged){record(a.item.id,"assisted"); a.assistLogged=true;}
-      renderRecall(); document.querySelector("#recall-input").focus(); announce(`C${c.id} hint: ${P.recallHintText(c.title,a.hintWords,true)}`);
+      renderRecall();
+      const restored=document.querySelector("#recall-input");restored.focus();
+      restored.setSelectionRange(selection.start,selection.end,selection.direction);restored.scrollLeft=selection.scrollLeft;
+      announce(`C${c.id} hint: ${P.recallHintText(c.title,a.hintWords,true)}`);
     });
     document.querySelector("#reveal").onclick=()=>{
       if(a.done)return;

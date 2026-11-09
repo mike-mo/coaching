@@ -11,7 +11,7 @@ function summaryMarkup(result,active=null){
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
   const renderer=app.slice(app.indexOf("function renderSummary("),app.indexOf("function updateShell("));
   const main={innerHTML:""},controls=new Map();
-  const sandbox={P,D,main,result,state:{exam:null},active,
+  const sandbox={P,D,main,result,state:{exam:null,practices:{}},active,
     modeNames:{recall:"Core competency recall",questions:"Questions",mixed:"Mixed practice"},
     comp:id=>D.competencies.find(c=>c.id===id),titleLabel:context.window.EXAM.titleLabel,
     normalizeTitle:context.window.EXAM.normalizeTitle,escape:value=>value,coffee:{eligible:()=>false},
@@ -413,6 +413,103 @@ test("recall input consumes the submit Enter before focus moves to Continue",()=
   form.onkeydown({...event,isComposing:true});
   form.onkeydown({...event,target:{}});
   assert.equal(submissions,1);
+});
+test("hint rerenders preserve caret, backward selection and horizontal input scroll",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const handler=app.slice(app.indexOf('document.querySelectorAll("[data-hint]")'),app.indexOf('document.querySelector("#reveal").onclick',app.indexOf('document.querySelectorAll("[data-hint]")')));
+  for(const kind of ["letter","word","core"]){
+    for(const range of [[13,13,"none"],[2,10,"backward"]]){
+      const input={selectionStart:range[0],selectionEnd:range[1],selectionDirection:range[2],scrollLeft:27};
+      const a={item:{id:"r1"},done:false,hints:0,hintWords:[0,0,0]},button={dataset:{hint:kind}};
+      const calls=[],restored={focus:()=>calls.push("focus"),setSelectionRange:(...args)=>calls.push(args)};
+      const sandbox={P,a,input,c:D.competencies[0],record:()=>{},renderRecall:()=>calls.push("render"),announce:()=>{},
+        document:{querySelectorAll:()=>[button],querySelector:()=>restored}};
+      vm.createContext(sandbox);vm.runInContext(handler,sandbox);button.onclick();
+      assert.equal(a.hints,1);
+      assert.deepEqual(calls,["render","focus",range]);
+      assert.equal(restored.scrollLeft,27);
+      a.hintWords=[1,2,2];button.dataset.hint="core";button.onclick();
+      assert.equal(a.hints,1,"Exhausted hints do not rerender or disturb selection");
+      assert.equal(calls.length,3);
+    }
+  }
+});
+test("programmatic focus keeps native controls and authored tab order intact",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const helper=app.slice(app.indexOf('function focus(selector'),app.indexOf('const normalizeTitle ='));
+  for(const native of [true,false]){
+    let attrs=0,focused=0,scrolled=0;
+    const element={getClientRects:()=>[{}],matches:selector=>{
+      for(const token of ["input","summary","button","a[href]","[tabindex]"])assert.ok(selector.includes(token));
+      return native;
+    },setAttribute:(name,value)=>{assert.equal(name,"tabindex");assert.equal(value,"-1");attrs++;},
+    focus:()=>focused++,scrollIntoView:()=>scrolled++};
+    const sandbox={main:{querySelectorAll:()=>[element]}};
+    vm.createContext(sandbox);vm.runInContext(helper,sandbox);vm.runInContext('focus("target",true)',sandbox);
+    assert.equal(attrs,native?0:1);assert.equal(focused,1);assert.equal(scrolled,1);
+  }
+});
+test("external progress updates refresh idle results but preserve active drafts on conflicts",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const helper=app.slice(app.indexOf("function refreshStoredProgress("),app.indexOf("function storageError("));
+  for(const open of [false,true]){
+    for(const writing of [false,true]){
+      const original={draft:"Keep my answer"},updated={practices:{}},calls=[];
+      const sandbox={dialog:{open},flow:writing?original:null,state:original,returnView:{},session:{},active:{},reviewIndex:1,
+        introMode:"recall",view:"home",saveFailed:false,load:()=>{calls.push("load");return updated;},
+        storageError:text=>calls.push(text),renderHome:()=>calls.push("home"),focus:()=>calls.push("focus"),announce:()=>calls.push("announce")};
+      vm.createContext(sandbox);vm.runInContext(helper,sandbox);vm.runInContext("refreshStoredProgress()",sandbox);
+      if(open&&writing){
+        assert.equal(sandbox.state,original);assert.equal(sandbox.flow,original);assert.equal(sandbox.saveFailed,true);
+        assert.match(calls[0],/will not overwrite/);assert.equal(calls.length,1);
+      }else{
+        assert.equal(sandbox.state,updated);assert.equal(sandbox.returnView.stale,true);
+        assert.equal(calls.includes("home"),!open);
+        if(!open){assert.equal(sandbox.flow,null);assert.equal(sandbox.active,null);assert.equal(sandbox.session,null);}
+      }
+    }
+  }
+  assert.match(app,/event\.key===KEY \|\| event\.key===null/);
+  assert.match(app,/if\(previous\.stale\)\{view="home";session=null;active=null;flow=null;reviewIndex=null;introMode=null;renderHome\(\);\}/);
+});
+test("saved answer review rejects removed or replaced rounds, including before a storage event",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const start=app.indexOf("reviewButton.onclick=()=>{"),end=app.indexOf('document.querySelector(".summary-actions").append',start);
+  const handler=app.slice(start,end);
+  for(const kind of ["missing","replaced","external","unavailable","valid"]){
+    const saved={snapshot:{}},button={},calls=[];
+    const sandbox={reviewButton:button,savedRound:kind==="missing"?undefined:saved,
+      state:{practices:{recall:kind==="missing"?undefined:kind==="replaced"?{}:saved}},result:{mode:"recall"},reviewable:[0,1],
+      KEY:"study",lastStored:"original",localStorage:{getItem:()=>{if(kind==="unavailable")throw Error("Unavailable");return kind==="external"?null:"original";}},
+      refreshStoredProgress:()=>calls.push("refresh"),storageError:()=>calls.push("error"),openShell:()=>calls.push("open"),
+      beginFlow:(_mode,round)=>{assert.equal(round.snapshot.reviewIndex,1);calls.push("begin");},
+      viewAnswer:index=>{assert.equal(index,1);calls.push("review");},animatePracticeEntry:()=>calls.push("animate")};
+    vm.createContext(sandbox);vm.runInContext(handler,sandbox);button.onclick();
+    assert.deepEqual(calls,kind==="valid"?["open","begin","review","animate"]:kind==="unavailable"?["error"]:["refresh"]);
+    assert.equal(saved.snapshot.reviewIndex,undefined,"Review uses a copy");
+  }
+});
+test("returning to current feedback focuses visible selected response or recall Continue",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const helper=app.slice(app.indexOf("function resumeCurrent("),app.indexOf("function animateStudyNavigation("));
+  for(const type of ["questions","recall"]){
+    for(const done of [false,true]){
+      const calls=[],sandbox={flow:{completed:false},finishPracticeEntry:null,reviewIndex:0,clockStarted:null,answerStarted:null,
+        active:{done,item:{type}},session:{index:1},performance:{now:()=>100},
+        renderStudy:()=>calls.push("render"),focusRecallContinue:()=>calls.push("continue"),
+        focus:(selector,visible)=>{
+          assert.equal(visible,true);
+          assert.equal(selector,type==="questions"&&done?".answer-card.selected summary":"#recall-input,.scenario-prompt,#study-card h3");
+          calls.push("selected-or-input");
+        },
+        animateStudyNavigation:()=>{},persist:()=>{},announce:text=>calls.push(text)};
+      vm.createContext(sandbox);vm.runInContext(helper,sandbox);vm.runInContext("resumeCurrent()",sandbox);
+      assert.equal(sandbox.reviewIndex,null);
+      assert.equal(sandbox.answerStarted,done?null:100);
+      assert.equal(calls[1],type==="recall"&&done?"continue":"selected-or-input");
+      assert.equal(calls[2],"Returned to your current item.");
+    }
+  }
 });
 test("item navigation slides in the right direction, cancels stale motion and honors reduced motion",()=>{
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
