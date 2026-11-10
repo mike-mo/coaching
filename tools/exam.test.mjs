@@ -60,6 +60,27 @@ test("exam instructions distinguish exact names from three-sentence summaries",(
   assert.match(source,/escape\(D\.examInstruction\)/);
   assert.doesNotMatch(source,/add three points|Use a timer\?/);
 });
+test("written practice clearly scopes the exercise and names both official exam routes",()=>{
+  const c={window:{}};
+  vm.runInNewContext(readFileSync(new URL("../content.js",import.meta.url),"utf8"),c);
+  vm.runInNewContext(readFileSync(new URL("../exam.js",import.meta.url),"utf8"),c);
+  const D=c.window.STUDY,E=c.window.EXAM;
+  assert.equal(D.writingScope,"A memory and self-explanation exercise, not an ICF exam simulation. Only exact names and order are checked; you review your summaries.");
+  assert.equal(D.examGuidance[0].label,"ACC exam guidance");
+  assert.equal(D.examGuidance[0].url,"https://coachingfederation.org/credentialing/icf-credential-exams/acc-exam/");
+  assert.equal(D.examGuidance[1].label,"PCC-MCC exam transition guidance");
+  assert.equal(D.examGuidance[1].url,"https://coachingfederation.org/blog/candidates-guide-to-updated-credentialing-exam/");
+  const guidance=E.guidance(value=>value);
+  assert.equal((guidance.match(/target="_blank" rel="noopener noreferrer"/g)||[]).length,2);
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const source=readFileSync(new URL("../exam.js",import.meta.url),"utf8");
+  assert.match(app,/>Written practice<\/h2>/);
+  assert.match(app,/>2025 COMPETENCY STUDY<\/span><h3>Written competency rehearsal<\/h3>/);
+  assert.match(app,/Start written rehearsal/);
+  assert.doesNotMatch(source,/>Exam practice<|>Exam rehearsal<|Core competency exam rehearsal/);
+  assert.match(source,/icf-written-competency-rehearsal\.txt/);
+  assert.match(source,/\["Written competency rehearsal",D\.writingScope/);
+});
 test("intro-only close restores prior view without saving or summarizing",()=>{
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
   const close=app.slice(app.indexOf("function closeStudy("),app.indexOf("function renderSummary("));

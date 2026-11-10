@@ -22,7 +22,13 @@ test("all question and conversation explanations stay in the coaching context", 
 test("official quotations, sources, option text, keys and conversation remain unchanged", () => {
   const structure = {source:D.source,version:D.version,examInstruction:D.examInstruction,
     subcompetencies:D.subcompetencies,competencies:D.competencies,
-    questions:D.questions.map(q => ({...q,options:q.options.map(o => [o[0],o[2]])})),scenario:D.scenario};
+    questions:D.questions.map(({ethicsRefs,...q}) => ({...q,options:q.options.map(o => [o[0],o[2]])})),scenario:D.scenario};
   assert.equal(createHash("sha256").update(JSON.stringify(structure)).digest("hex"),
     "b859b400930beb592171beb0675849c4da0258f0cef57861448ee70ff2094111");
+});
+test("only records and technology scenarios add separately numbered ethics references",()=>{
+  const cited=D.questions.filter(q=>q.ethicsRefs);
+  assert.deepEqual(Array.from(cited,q=>[q.id,Array.from(q.ethicsRefs)]),[
+    ["case-summary-tool",["2.4","2.5"]],["case-learning-tool",["2.5"]]
+  ]);
 });

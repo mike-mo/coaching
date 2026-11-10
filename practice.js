@@ -26,6 +26,17 @@ window.PRACTICE = (() => {
     if (response.revealed === true || response.matched !== true || response.outcome === "missed") return "missed";
     return response.outcome === "unaided" ? "unaided" : "assisted";
   }
+  function recallMissLabel(response) {
+    return response?.revealed===true?"Pass: answer revealed":response?.revealed===false && response.matched===false?"Name did not match":"Needs another look";
+  }
+  function recallRetryTargets(rows) {
+    const known=rows.filter(r=>r.type==="recall" && Number.isInteger(r.c) && r.c>=1 && r.c<=8);
+    const unique=[...new Map(known.map(r=>[r.c,r])).values()];
+    return {
+      missed:unique.filter(r=>r.revealed===true || r.matched===false),
+      assisted:unique.filter(r=>r.revealed===false && r.matched===true && recallOutcome(r)==="assisted")
+    };
+  }
   function recallMisplacement(answer,competencies,normalize) {
     if(!answer || answer.revealed===true || answer.matched!==false)return null;
     const expected=answer.c ?? answer.item?.c;
@@ -59,15 +70,21 @@ window.PRACTICE = (() => {
     const session=saved.snapshot?.session;
     return saved.responses.slice(session?.roundStart || 0,session?.roundEnd);
   }
-  function recallPercentage(saved) {
+  function recallScore(saved) {
     if(saved.mode!=="recall" || !saved.completed)return null;
     const rows=roundResponses(saved);
-    if(rows.length!==8 || new Set(rows.map(r=>r.c)).size!==8 ||
+    if(!rows.length || rows.length>8 || new Set(rows.map(r=>r.c)).size!==rows.length ||
       rows.some(r=>r.type!=="recall" || !Number.isInteger(r.c) || r.c<1 || r.c>8 ||
         !Object.hasOwn(r,"score") || !Number.isFinite(r.score) || r.score<0 || r.score>10))return null;
-    return Math.round(rows.reduce((sum,r)=>sum+r.score,0)/80*100);
+    return {earned:rows.reduce((sum,r)=>sum+r.score,0),maximum:rows.length*10};
+  }
+  function recallPercentage(saved) {
+    if(saved.snapshot?.session?.retry===true)return null;
+    const score=recallScore(saved);
+    return score?.maximum===80?Math.round(score.earned/80*100):null;
   }
   function roundMetric(saved,examMatches=null) {
+    if(saved.snapshot?.session?.retry===true)return null;
     if(saved.mode==="exam")return examMatches?.length===8?{scheme:"exam-names-v1",score:examMatches.filter(Boolean).length/8}:null;
     const rows=roundResponses(saved);
     if(!rows.length || rows.some(r=>r.type==="questions" && r.scoreVersion!==2))return null;
@@ -176,6 +193,7 @@ window.PRACTICE = (() => {
       s.branchChoice!==null && (!Number.isInteger(s.branchChoice) || !data.scenario.nodes[s.scenarioNode]?.choices?.[s.branchChoice]))return false;
     if(["scenario","exam"].includes(p.mode)?s.session!==null || s.active!==null:!s.session)return false;
     if(s.session && (s.session.type!==p.mode || !Array.isArray(s.session.items) || !s.session.items.length || s.session.items.length>40 ||
+      (s.session.retry!==undefined && (s.session.retry!==true || p.mode!=="recall" || s.session.items.length>8 || s.session.roundStart!==0 || s.session.roundEnd!==s.session.items.length)) ||
       !s.session.items.every(i=>validItem(i) && (p.mode==="mixed" || i.type===p.mode)) ||
       new Set(s.session.items.map(i=>i.id)).size!==s.session.items.length ||
       !Number.isInteger(s.session.index) || s.session.index<0 || s.session.index>s.session.items.length ||
@@ -197,5 +215,5 @@ window.PRACTICE = (() => {
     if(p.mode==="scenario" && (p.responses.length!==s.history.length+(s.branchChoice!==null?1:0) || p.completed!==(s.scenarioNode===null)))return false;
     return true;
   }
-  return {uiVersion:6,recallOutcome,recallMisplacement,points,recallPoints,recallPercentage,recallHintState,nextRecallHint,recallHintText,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,coffee,validSaved};
+  return {uiVersion:7,recallOutcome,recallMissLabel,recallRetryTargets,recallMisplacement,points,recallPoints,recallScore,recallPercentage,recallHintState,nextRecallHint,recallHintText,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,coffee,validSaved};
 })();

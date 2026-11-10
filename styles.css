@@ -169,6 +169,9 @@ footer{align-items:center;flex-wrap:wrap}
 .competency-stat.recall-missed{background:var(--recall-wrong);border-color:var(--recall-wrong-line)}
 .competency-stat .recall-outcome{color:var(--ink);font-weight:600}
 .recall-total{display:flex;align-items:baseline;gap:12px;margin:12px 0 18px}.recall-total strong{font-size:2.25rem;line-height:1.2;color:var(--green)}.recall-total span{font-size:.85rem;color:var(--muted)}
+.recall-retry{margin:24px 0;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--white)}.recall-retry h2{font-size:1.2rem}.recall-retry li{margin-block:8px}.recall-retry .muted{font-size:.85rem}.recall-retry button{max-width:100%}.retry-inclusion{display:flex;align-items:flex-start;gap:10px;min-height:44px;padding-block:10px;margin-bottom:12px}.retry-inclusion input{width:20px;height:20px;min-height:20px;padding:0;flex-shrink:0;margin:3px 0}
+.exam-guidance{font-size:.9rem}.exam-guidance a{white-space:normal}
+#study-dock.item-navigation>.answer-cue{grid-row:1;grid-column:2 / 4;margin:0;text-align:right;font-size:.85rem;align-self:center}
 .summary-help{margin:24px 0;font-size:.9rem;color:var(--muted)}.summary-help p{margin-top:8px}.summary-actions{margin:22px 0}.competency-stats-heading{display:flex;align-items:center;gap:12px;font-size:1.4rem;margin:30px 0 20px}.competency-stats-heading svg{width:32px;height:32px;flex-shrink:0;fill:none;stroke:var(--green);stroke-width:2.5;stroke-linecap:round}
 @media(max-width:540px){.summary-actions{display:grid;grid-template-columns:1fr;gap:8px}.summary-actions button{width:100%;min-height:48px}.competency-stats-heading{font-size:1.25rem}}
 .exam-comparison{margin:28px 0;border:1px solid var(--line);border-radius:14px;padding:12px 20px;background:var(--white)}
