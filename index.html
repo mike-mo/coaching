@@ -24,12 +24,12 @@
   <title>Coachprep · ICF competency practice</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=1">
   <script src="theme.js?v=3"></script>
-  <link rel="stylesheet" href="styles.css?v=23">
-  <script defer src="content.js?v=11"></script>
-  <script defer src="exam.js?v=13"></script>
+  <link rel="stylesheet" href="styles.css?v=24">
+  <script defer src="content.js?v=12"></script>
+  <script defer src="exam.js?v=14"></script>
   <script defer src="analytics.js?v=3"></script>
-  <script defer src="practice.js?v=6"></script>
-  <script defer src="app.js?v=28"></script>
+  <script defer src="practice.js?v=7"></script>
+  <script defer src="app.js?v=29"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to practice</a>
@@ -41,7 +41,7 @@
     <button data-view="home" aria-current="page">Home</button>
     <button data-view="recall">Core competency recall</button>
     <button data-view="questions">Questions</button>
-    <button data-view="exam">Exam rehearsal</button>
+    <button data-view="exam">Written competency rehearsal</button>
   </nav>
   <p id="storage-warning" class="warning" role="alert" hidden></p>
   <p id="theme-warning" class="warning" role="alert" hidden></p>
@@ -56,7 +56,10 @@
     <p>Questions and scenarios are fictional. This material is provided as is, without guarantees of accuracy or suitability. It is not professional advice. Use official ICF requirements for training and assessment.</p>
     <p>Based on the <strong>2025 ICF Core Competencies</strong>, released September 2025, rev. 09.08.25, PDF pp. 3-10. Official titles, definitions and cited sub-competencies are quoted from ICF; questions and explanations are original.</p>
     <p><a href="https://coachingfederation.org/credentialing/coaching-competencies/icf-core-competencies/" target="_blank" rel="noopener noreferrer">Official ICF competency resource (opens a new tab)</a></p>
-    <p>Your study progress and exam answers stay in this browser and do not sync. Clearing browser data can erase them. Use fictional examples in your answers.</p>
+    <p><a href="https://coachingfederation.org/resource/icf-code-of-ethics/" target="_blank" rel="noopener noreferrer">Official ICF Code of Ethics (opens a new tab)</a></p>
+    <p>For records and technology scenarios, see Code standards 2.4 and 2.5. These ethics-standard numbers are separate from 2025 competency IDs and PCC/course markers.</p>
+    <p>Check the official guidance for your exam route and test date. Current professional standards and exam reference versions can differ.</p>
+    <p>Your study progress and written answers stay in this browser and do not sync. Clearing browser data can erase them. Use fictional examples in your answers.</p>
     <p>On smartify.space, Cloudflare collects page-visit and performance stats. Study stats count mode starts, completions, answered items, hint uses, passes and practice exits, plus foreground practice time within one minute of an interaction. They contain no answer text, scores or tracking identifiers. Local and GitHub Pages versions have no analytics. Do Not Track and Global Privacy Control disable usage stats.</p>
     <div class="field usage-setting"><label><input id="usage-opt-out" type="checkbox" aria-describedby="usage-status"> Turn off usage stats in this browser</label><small id="usage-status" role="status">Usage stats are unavailable.</small></div>
     <div class="field theme-setting"><label for="theme-select">Theme</label><select id="theme-select" aria-describedby="theme-help"><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select><small id="theme-help">Saved in this browser. System follows your browser or device.</small></div>
@@ -64,7 +67,7 @@
   </dialog>
   <dialog id="reset-dialog" aria-labelledby="reset-title">
     <h2 id="reset-title">Delete your study progress?</h2>
-    <p>This removes this app's counts, missed items, review dates and current and previous exam rehearsal answers from this browser. Other apps are not affected.</p>
+    <p>This removes this app's counts, missed items, review dates and current and previous written rehearsal answers from this browser. Other apps are not affected.</p>
     <div class="actions"><button id="cancel-reset">Keep my progress</button><button class="danger" id="confirm-reset">Delete study progress</button></div>
   </dialog>
 </body>

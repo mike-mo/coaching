@@ -3,6 +3,7 @@ window.EXAM = (() => {
   const duration = 2 * 60 * 60 * 1000;
   const normalizeTitle = text => (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).join(" ");
   const titleLabel = (competency, text = competency.title) => `C${competency.id}. ${text}`;
+  const guidance = escape => `<p class="exam-guidance">Check official exam guidance: ${window.STUDY.examGuidance.map(link=>`<a href="${link.url}" target="_blank" rel="noopener noreferrer">${escape(link.label)} (opens a new tab)</a>`).join(" · ")}.</p>`;
   function validAttempt(a) {
     if (a === null || a === undefined) return true;
     if (!a || typeof a !== "object" || !["untimed","timed","elapsed"].includes(a.mode) ||
@@ -122,7 +123,7 @@ window.EXAM = (() => {
     }
     function download() {
       const a=get();if(!a)return;
-      const text = ["Core competency exam rehearsal",`Elapsed practice time: ${window.PRACTICE.duration(a.status === "draft" ? getElapsed() : a.elapsedMs)}`,`Status: ${{draft:"In progress",submitted:"Finished",expired:"Finished"}[a.status]}`,
+      const text = ["Written competency rehearsal",D.writingScope,`Elapsed practice time: ${window.PRACTICE.duration(a.status === "draft" ? getElapsed() : a.elapsedMs)}`,`Status: ${{draft:"In progress",submitted:"Finished",expired:"Finished"}[a.status]}`,
         `Started: ${new Date(a.startedAt).toISOString()}`,
         "",
         ...a.answers.flatMap((answer,i)=>{
@@ -133,24 +134,24 @@ window.EXAM = (() => {
       ].join("\n");
       const url=URL.createObjectURL(new Blob([text],{type:"text/plain;charset=utf-8"}));
       const link=document.createElement("a");
-      link.href=url;link.download="icf-exam-rehearsal.txt";document.body.append(link);link.click();link.remove();
+      link.href=url;link.download="icf-written-competency-rehearsal.txt";document.body.append(link);link.click();link.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
     }
     function timer() {
       const a=get(), element=document.querySelector("#exam-time");
       if(!element || !a)return;
       element.textContent=window.PRACTICE.duration(a.status === "draft" ? getElapsed() : a.elapsedMs);
-      element.setAttribute("aria-label","Elapsed exam practice time");
+      element.setAttribute("aria-label","Elapsed written practice time");
     }
     function saveLabel() {
       const element=document.querySelector("#exam-save");
       if(element)element.textContent=hasStorageFailure() ? "Not saved. Keep this tab open or save a text copy." : "Saved in this browser.";
     }
     function renderSetup() {
-      main.innerHTML=`<p class="eyebrow">Exam practice</p><h1>Exam rehearsal</h1><p class="lead">${escape(D.examInstruction)}</p>
+      main.innerHTML=`<p class="eyebrow">Written practice</p><h1>Written competency rehearsal</h1><p class="lead">${escape(D.examInstruction)}</p><p>${escape(D.writingScope)}</p>${guidance(escape)}
         <section class="card exam-setup"><p>Use the exact competency names, without C numbers. The timer counts up while you write, with no time limit. Reviewing your previous pass or closing practice pauses it.</p>
         <p class="muted">${getPrevious() ? "Your previous completed pass is saved. You can choose to compare it with what you write next." : "After your first completed pass, you can keep it to compare with your next rehearsal."} Your summaries are for self-evaluation, not automatic grading.</p>
-        <div class="actions"><button class="primary" id="exam-start">Start rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
+        <div class="actions"><button class="primary" id="exam-start">Start written rehearsal</button><button id="exam-home">Back to home</button></div></section>`;
       document.querySelector("#exam-start").onclick=()=>{
         if(get())return;
         const startedAt=Date.now();
@@ -163,7 +164,7 @@ window.EXAM = (() => {
       document.querySelector("#exam-home").onclick=home;
     }
     function renderDraft(a) {
-      main.innerHTML=`<p class="eyebrow">Exam rehearsal</p><h1>Write from memory.</h1><p class="lead">${escape(D.examInstruction)}</p>
+      main.innerHTML=`<p class="eyebrow">Written competency rehearsal</p><h1>Write from memory.</h1><p class="lead">${escape(D.examInstruction)}</p>
         <div class="exam-toolbar"><span id="exam-save"></span><span class="exam-clock"><strong id="exam-time" role="timer" aria-live="off">00:00</strong></span></div>
         <p class="muted">Write one sentence in each of the three fields. Change any answer before you finish. Your draft saves as you type; you can leave and come back to it. Use fictional examples and leave out client details.</p>
         ${getPrevious()?'<p><a href="#exam-comparison" id="exam-compare-link">Compare with your previous pass</a> when you want to review what has changed.</p>':""}
@@ -229,7 +230,7 @@ window.EXAM = (() => {
       const checks=a.answers.map((answer,i)=>compareTitle(answer.title,i+1,D.competencies));
       const matches=checks.filter(c=>c.kind==="match").length;
       const missing=incomplete(a);
-      main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Exam rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your core competency results"}</h1>
+      main.innerHTML=`<p class="eyebrow">${a.status === "expired" ? "Time is up" : "Written competency rehearsal"}</p><h1>${matches===8?"All eight in order!":"Your core competency results"}</h1>
         <section class="exam-result-summary ${matches===8?"complete":""}" aria-label="Core competency results">${matches===8?checkIcon:""}<div><p id="exam-title-score">${matches} of 8 core competencies named correctly</p><p class="exam-score-description">Exact competency names in the right numbered positions.</p></div></section>
         <p class="lead">Only the exact competency names and their order are checked automatically. Review your own-word summaries below.</p>
         ${comparison(a)}
@@ -269,5 +270,5 @@ window.EXAM = (() => {
     });
     return {render,reset:()=>{pendingAction=null;if(dialog.open)dialog.close();}};
   }
-  return {uiVersion:13,normalizeTitle,titleLabel,validAttempt,migrate,compareTitle,create};
+  return {uiVersion:14,normalizeTitle,titleLabel,guidance,validAttempt,migrate,compareTitle,create};
 })();

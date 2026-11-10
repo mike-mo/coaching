@@ -1,9 +1,14 @@
 "use strict";
 window.STUDY = {
-  uiVersion: 11,
+  uiVersion: 12,
   source: "2025 ICF Core Competencies",
   version: "Released September 2025 · rev. 09.08.25",
   examInstruction: "Write the names of all eight core competencies exactly, in order, then summarize each in three sentences in your own words. After another rehearsal, you can compare your answers with your previous answers.",
+  writingScope: "A memory and self-explanation exercise, not an ICF exam simulation. Only exact names and order are checked; you review your summaries.",
+  examGuidance: [
+    {label:"ACC exam guidance",url:"https://coachingfederation.org/credentialing/icf-credential-exams/acc-exam/"},
+    {label:"PCC-MCC exam transition guidance",url:"https://coachingfederation.org/blog/candidates-guide-to-updated-credentialing-exam/"}
+  ],
   subcompetencies: {
     "1.01": "Demonstrates personal integrity and honesty in interactions with clients, sponsors and relevant stakeholders",
     "1.02": "Is sensitive to clients' identity, environment, experiences, values and beliefs",
@@ -102,7 +107,7 @@ window.STUDY = {
         ["Explore what relying on an expert would mean about their confidence.","That may be useful if the client wants it. Here it adds a personal interpretation before understanding their request for expertise.","less"],
         ["Clarify whether they want to change to consulting and agree what that would involve.","The request may call for another role. Naming that distinction lets the client make an informed choice before advice is offered.","strongest"]
       ], answer:3, takeaway:"Expert information can have a place. Make the role and agreement clear rather than disguising consulting as a coaching question."},
-    {id:"case-summary-tool", label:"A new summary tool", c:1, refs:["1.05"], also:[{c:2,refs:["2.02"]}],
+    {id:"case-summary-tool", label:"A new summary tool", c:1, refs:["1.05"], also:[{c:2,refs:["2.02"]}], ethicsRefs:["2.4","2.5"],
       prompt:"A client wants a session summary. You are considering a new cloud transcription tool whose retention and access terms you have not checked. The client says, 'I'm fine with tools.' What is the strongest next step?", options:[
         ["Check the tool's data handling and the agreement, then explain the proposed use before seeking informed permission.","General comfort with tools does not settle who can access a recording or how it is retained. This checks the proposed use before any upload.","strongest"],
         ["Use the tool after removing names from the recording.","Voices and contextual details may still identify people. Removing names does not resolve the unknown data handling.","less"],
@@ -130,7 +135,7 @@ window.STUDY = {
         ["Arrange a reschedule if you judge that you cannot offer your usual attention.","Rescheduling can spare the client a session in which you cannot give them your attention. The remaining time also offers a chance to settle yourself and check whether you can be present.","reasonable"],
         ["Open with the client's recent successes to create a more positive atmosphere.","That opening could serve a client in another session. Here it is chosen to change the coach's mood rather than for the client's purpose.","less"]
       ], answer:0, takeaway:"Prepare for the client with an honest assessment of your capacity. Emotional regulation and appropriate help are part of the coach's ongoing practice."},
-    {id:"case-learning-tool", label:"A tool promises a rating", c:2, refs:["2.02","2.03","2.08"],
+    {id:"case-learning-tool", label:"A tool promises a rating", c:2, refs:["2.02","2.03","2.08"], ethicsRefs:["2.5"],
       prompt:"A new coach-development tool claims its preferred question sequence demonstrates every competency. You want to use it to improve your work, but have not checked that claim. What is the strongest approach?", options:[
         ["Compare its ratings with your own impressions and adopt it where they agree.","Agreement with your own impressions can repeat the same blind spots. It does not establish that the tool's claims are sound.","less"],
         ["Use its sequence as a consistent baseline for all clients.","Consistency can help learning, but an unverified sequence may turn coaching into a script that does not fit each client.","less"],

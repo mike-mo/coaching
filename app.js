@@ -8,7 +8,7 @@
   document.querySelector('[data-view="scenario"]')?.remove();
   const oldPrivacy=[...document.querySelectorAll("#about-dialog p")].find(p=>p.textContent.includes("doesn't save what you type") || p.textContent.includes("optional deadline"));
   if(oldPrivacy){
-    oldPrivacy.textContent="Your study progress and exam answers stay in this browser and do not sync. Clearing browser data can erase them. Use fictional examples in your answers.";
+    oldPrivacy.textContent="Your study progress and written answers stay in this browser and do not sync. Clearing browser data can erase them. Use fictional examples in your answers.";
   }
   document.querySelectorAll("#about-dialog p").forEach(p=>{if(p.textContent.includes("footer coffee link") || p.textContent.includes("third distinct local visiting day"))p.remove();});
   const coffeeLink=document.querySelector("#coffee-link");
@@ -60,7 +60,7 @@
     if(!navigationMotion.matches)return;
     studyTransition?.cancel();finishPracticeEntry?.();finishShellClose?.();
   });
-  const modeNames={recall:"Core competency recall",questions:"Questions",mixed:"Mixed practice",scenario:"Conversation",exam:"Exam rehearsal"};
+  const modeNames={recall:"Core competency recall",questions:"Questions",mixed:"Mixed practice",scenario:"Conversation",exam:"Written competency rehearsal"};
   const usageMode=mode=>({recall:"titles",scenario:"conversation"}[mode] || mode);
   const coffeeWarning=document.querySelector("#coffee-warning");
   const coffee=P.coffee({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)},message=>{
@@ -214,6 +214,10 @@
   }
   function recordCompletion(){
     if(!flow?.completed || flow.completionRecorded)return null;
+    if(session?.retry===true){
+      flow.completionRecorded=true;stash();
+      return {old:state.previousRounds,oldModes:state.completedModes,celebrate:false};
+    }
     const matches=flow.mode==="exam"?state.exam?.answers.map((a,i)=>window.EXAM.compareTitle(a.title,i+1,D.competencies).kind==="match"):null;
     const current=P.roundMetric(flow,matches),previous=state.previousRounds[flow.mode];
     const changed={...state.previousRounds};
@@ -280,12 +284,19 @@
       return misplaced?{...response,misplacedC:misplaced.id}:response;
     }),draft=state.exam,examMode=result.mode==="exam";
     const recallPercent=P.recallPercentage(result);
+    const retry=result.snapshot?.session?.retry===true,retryScore=retry?P.recallScore(result):null;
+    const recallCount=result.mode==="recall" && result.completed && answered.length &&
+      answered.every(r=>r.type==="recall" && typeof r.matched==="boolean" && typeof r.revealed==="boolean")?
+      `<p class="recall-accuracy">${answered.filter(r=>P.recallOutcome(r)==="unaided").length} of ${answered.length} competencies recalled without hints</p>`:"";
+    const targets=result.mode==="recall" && result.completed?P.recallRetryTargets(answered):{missed:[],assisted:[]};
+    const retryLabel=count=>count?`Practice ${count===1?"this competency":`these ${count} competencies`}`:"Choose competencies to practice";
+    const retryPanel=targets.missed.length || targets.assisted.length?`<section class="recall-retry" aria-labelledby="retry-heading"><h2 id="retry-heading">Practice again</h2>${targets.missed.length?`<p>Try these competencies from this round again:</p><ul>${targets.missed.map(r=>`<li>${escape(titleLabel(comp(r.c)))} (${r.revealed===true?"passed":P.recallOutcome(r)==="misplaced"?"wrong position":P.recallMissLabel(r).toLowerCase()})</li>`).join("")}</ul>`:"<p>You recalled every competency. You can try the ones you recalled with hints again.</p>"}${targets.assisted.length?`<label class="retry-inclusion"><input type="checkbox" id="include-hinted"> <span>Include ${targets.assisted.map(r=>escape(titleLabel(comp(r.c)))).join("; ")}, recalled with hints</span></label>`:""}<button id="retry-recall" class="primary"${targets.missed.length?"":" disabled"}>${retryLabel(targets.missed.length)}</button><p class="muted">Choosing this retry does not change your review dates.</p></section>`:"";
     const titleMatches=examMode && draft?.status!=="draft"?draft?.answers.map((a,i)=>window.EXAM.compareTitle(a.title,i+1,D.competencies).kind==="match"):null;
     const mean=answered.length?answered.reduce((n,r)=>n+r.seconds,0)/answered.length:null;
     const pendingRecall=active && !active.done && active.item.type==="recall" && (active.hints>0 || active.attempt.trim())?active:null;
     const lastMetric=examMode?titleMatches?`${titleMatches.filter(Boolean).length} / 8`:"Not checked":mean===null?"Not yet":P.duration(mean*1000);
     const q=answered.filter(r=>r.type==="questions");
-    main.innerHTML=`<section class="session-summary"><p class="eyebrow">${modeNames[result.mode] || "Practice"} · ${result.completed?"Finished":"Paused"}</p><h1>Your study session</h1>${recallPercent!==null?`<p class="recall-total"><strong>${recallPercent}%</strong><span>Recall points earned</span></p>`:""}<div class="summary-actions actions"><button class="primary" id="resume-practice">${result.completed?"Start a new round":"Resume "+(modeNames[result.mode] || "practice").toLowerCase()}</button><button id="summary-home">Practice a different mode</button></div><div class="summary-totals"><div><strong>${P.duration(result.elapsedMs)}</strong><span>Elapsed study time</span></div><div><strong>${examMode?draft?.answers.filter(a=>a.title.trim()||a.bullets.some(b=>b.trim())).length || 0:answered.length}</strong><span>${examMode?"Competencies with writing":"Responses finished"}</span></div><div><strong>${lastMetric}</strong><span>${examMode?"Names matching":"Average answer time"}</span></div></div>${active && !active.done && !examMode?'<p class="muted">Your unfinished response is saved. Resume to continue from the same place.</p>':""}
+    main.innerHTML=`<section class="session-summary"><p class="eyebrow">${retry?"Targeted recall retry":modeNames[result.mode] || "Practice"} · ${result.completed?"Finished":"Paused"}</p><h1>Your study session</h1>${recallCount}${recallPercent!==null?`<p class="recall-total"><strong>${recallPercent}%</strong><span>Recall points earned</span></p>`:retryScore?`<p class="recall-total"><strong>${retryScore.earned} / ${retryScore.maximum}</strong><span>Retry points earned</span></p>`:""}<div class="summary-actions actions"><button class="primary" id="resume-practice">${result.completed?"Start a new round":"Resume "+(modeNames[result.mode] || "practice").toLowerCase()}</button><button id="summary-home">Practice a different mode</button></div>${retryPanel}<div class="summary-totals"><div><strong>${P.duration(result.elapsedMs)}</strong><span>Elapsed study time</span></div><div><strong>${examMode?draft?.answers.filter(a=>a.title.trim()||a.bullets.some(b=>b.trim())).length || 0:answered.length}</strong><span>${examMode?"Competencies with writing":"Responses finished"}</span></div><div><strong>${lastMetric}</strong><span>${examMode?"Names matching":"Average answer time"}</span></div></div>${active && !active.done && !examMode?'<p class="muted">Your unfinished response is saved. Resume to continue from the same place.</p>':""}
     <h2 class="competency-stats-heading"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 20V12M12 20V4M19 20V8"/></svg>Stats by competency</h2><div class="competency-stats">${D.competencies.map(c=>{
       const rows=answered.filter(r=>r.c===c.id),qs=rows.filter(r=>r.type==="questions"),names=rows.filter(r=>r.type==="recall"),conversation=rows.filter(r=>r.type==="scenario");
       const count=o=>qs.filter(r=>r.outcome===o).length,answer=draft?.answers[c.id-1];
@@ -298,13 +309,13 @@
       const recallOutcome=P.recallOutcome(names[0]) || (result.mode==="recall" && pending&&pendingRecall.hints?"assisted":null);
       const misplacedNames=names.filter(r=>P.recallOutcome(r)==="misplaced");
       const misplacedNotes=misplacedNames.map(r=>`<p class="recall-order-note">You named ${escape(titleLabel(comp(r.misplacedC)))}. This position is C${c.id}.${r.outcome==="assisted"?' <span class="pill">With hints</span>':""}</p>`).join("");
-      const recallLabels={unaided:"Correct without hints",assisted:"Used hints",misplaced:"Recognized competency, wrong order",missed:"Wrong / passed"};
+      const recallLabels={unaided:"Correct without hints",assisted:"Used hints",misplaced:"Recognized competency, wrong order",missed:P.recallMissLabel(names[0])};
       const recallIcons={unaided:"✓",assisted:"?",misplaced:"&#8596;",missed:"×"};
       const recallStatus=recallOutcome?`<p class="recall-outcome"><span aria-hidden="true">${recallIcons[recallOutcome]}</span> ${recallLabels[recallOutcome]}</p>`:"";
       return `<section class="competency-stat ${practiced?"":"unseen"}${recallOutcome?` recall-${recallOutcome}`:""}"><div class="stat-top"><h3>${escape(label)}</h3>${qs.length?`<div class="practice-score"><small>Practice score</small>${Math.round(qs.reduce((n,r)=>n+P.earnedPoints(r),0)/qs.length)}</div>`:""}</div>${!practiced?"<p>Not practiced</p>":examMode?`<p>${answer.title.trim()?"Core competency entered":"Core competency blank"} · ${answer.bullets.filter(b=>b.trim()).length} of 3 sentence fields filled${titleMatches?` · ${titleMatches[c.id-1]?"Named correctly":"Check the competency name"}`:""}</p>`:
       result.mode==="recall"?`${recallStatus}${misplacedNotes}${recallScore}${pending?"<p>Unfinished. Resume to continue.</p>":""}`:
-      `${qs.length?`<p>${count("recognition")} strongest · ${count("reasonable")} valid · ${count("missed")} to improve</p><p>${qs.length} answered · average answer time ${P.duration(qs.reduce((n,r)=>n+r.seconds,0)/qs.length*1000)}</p>`:""}${names.length?`${recallStatus}<p>${names.filter(r=>r.matched&&r.outcome==="unaided").length} correct without hints · ${names.filter(r=>r.outcome==="assisted").length} with hints or Pass · ${names.filter(r=>!r.matched&&!r.revealed&&P.recallOutcome(r)!=="misplaced").length} need another look</p>`:""}${misplacedNotes}${recallScore}${pending?`<p>Unfinished name attempt${pendingRecall.hints?` · ${pendingRecall.hints} hint${pendingRecall.hints===1?"":"s"} used`:""}. Resume to continue.</p>`:""}${conversation.length?`<p>${conversation.length} fictional conversation choice${conversation.length===1?"":"s"} explored. No automated score.</p>`:""}`}</section>`;
-    }).join("")}</div><details class="summary-help" open><summary>About these results</summary><p>These are practice results, not an official ICF assessment. ${q.length?"Question scores use 90 / 80 / 0 base points plus up to 14 accepted-response speed points, capped through 4 seconds and tapering to zero at one minute. The competency score is the rounded mean of earned scores. Earlier saved answers keep their original bonus.":""} Name recall, conversation choices and exam points are not speed-scored. Exam practice time counts up and pauses while you are away.</p></details>${coffee.eligible()?`<aside id="coffee-reminder" class="coffee-card"><h2>Say thanks</h2><p>Enjoying the practice? A coffee would make my day!</p><div class="actions"><a href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action">Buy me a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`:""}</section>`;
+      `${qs.length?`<p>${count("recognition")} strongest · ${count("reasonable")} valid · ${count("missed")} to improve</p><p>${qs.length} answered · average answer time ${P.duration(qs.reduce((n,r)=>n+r.seconds,0)/qs.length*1000)}</p>`:""}${names.length?`${recallStatus}<p>${names.filter(r=>P.recallOutcome(r)==="unaided").length} correct without hints · ${names.filter(r=>P.recallOutcome(r)==="assisted").length} correct with hints · ${names.filter(r=>r.revealed===true).length} passed · ${names.filter(r=>P.recallOutcome(r)==="missed" && r.revealed!==true).length} need another look</p>`:""}${misplacedNotes}${recallScore}${pending?`<p>Unfinished name attempt${pendingRecall.hints?` · ${pendingRecall.hints} hint${pendingRecall.hints===1?"":"s"} used`:""}. Resume to continue.</p>`:""}${conversation.length?`<p>${conversation.length} fictional conversation choice${conversation.length===1?"":"s"} explored. No automated score.</p>`:""}`}</section>`;
+    }).join("")}</div><details class="summary-help" open><summary>About these results</summary><p>These are practice results, not an official ICF assessment. ${q.length?"Question scores use 90 / 80 / 0 base points plus up to 14 accepted-response speed points, capped through 4 seconds and tapering to zero at one minute. The competency score is the rounded mean of earned scores. Earlier saved answers keep their original bonus.":""} Name recall, conversation choices and written practice are not speed-scored. Written practice time counts up and pauses while you are away.${retry?" This targeted retry is not compared with full rounds and does not change their comparison baseline.":""}</p></details>${coffee.eligible()?`<aside id="coffee-reminder" class="coffee-card"><h2>Say thanks</h2><p>Enjoying the practice? A coffee would make my day!</p><div class="actions"><a href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action">Buy me a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`:""}</section>`;
     document.querySelector("#summary-home").onclick=()=>{flow=null;view="home";renderHome();(launchFocus?.isConnected?launchFocus:document.querySelector("#brand")).focus();};
     const reviewSession=result.snapshot?.session;
     const reviewable=Object.keys(reviewSession?.answers || {}).map(Number).filter(i=>i>=(reviewSession.roundStart || 0) && i<=reviewSession.index);
@@ -312,12 +323,7 @@
       const savedRound=state.practices[result.mode];
       const reviewButton=document.createElement("button");reviewButton.id="review-round";reviewButton.textContent="Review your answers";
       reviewButton.onclick=()=>{
-        let unchanged;
-        try {unchanged=localStorage.getItem(KEY)===lastStored;}
-        catch {storageError("Your browser couldn't open saved progress. Keep this tab open and try again.");return;}
-        if(!savedRound || state.practices[result.mode]!==savedRound || !unchanged){
-          refreshStoredProgress();return;
-        }
+        if(!storedRoundIsCurrent(result.mode,savedRound))return;
         const saved=JSON.parse(JSON.stringify(savedRound));
         saved.snapshot.reviewIndex=Math.max(...reviewable);
         openShell();beginFlow(result.mode,saved,false);
@@ -330,9 +336,30 @@
       if(result.completed && ["recall","questions","mixed"].includes(result.mode)){openShell();startMode(result.mode);}
       else {navigate(result.mode || "recall");if(result.completed && result.mode==="exam")document.querySelector("#exam-discard")?.click();}
     };
+    const retryButton=document.querySelector("#retry-recall"),includeHinted=document.querySelector("#include-hinted");
+    const selectedIds=()=>targets.missed.concat(includeHinted?.checked?targets.assisted:[]).map(r=>r.c);
+    if(retryButton){
+      if(includeHinted)includeHinted.onchange=()=>{
+        const count=selectedIds().length;retryButton.disabled=count===0;retryButton.textContent=retryLabel(count);
+      };
+      const savedRound=state.practices[result.mode];
+      retryButton.onclick=()=>{
+        if(!storedRoundIsCurrent(result.mode,savedRound))return;
+        const ids=selectedIds();
+        if(!ids.length){announce("Choose at least one competency to practice.");return;}
+        startRecallRetry(ids);
+      };
+    }
     document.querySelector("#dismiss-coffee")?.addEventListener("click",()=>{if(coffee.dismiss()){document.querySelector("#coffee-reminder").remove();document.querySelector("#resume-practice").focus();}});
     updateNavigation();
     focus();
+  }
+  function storedRoundIsCurrent(mode,savedRound) {
+    let unchanged;
+    try {unchanged=localStorage.getItem(KEY)===lastStored;}
+    catch {storageError("Your browser couldn't open saved progress. Keep this tab open and try again.");return false;}
+    if(!savedRound || state.practices[mode]!==savedRound || !unchanged){refreshStoredProgress();return false;}
+    return true;
   }
   function updateShell(){
     if(!dialog.open)return;
@@ -361,7 +388,7 @@
     if(active && !active.done && flow && !isReview() && !finishPracticeEntry && answerStarted===null)answerStarted=performance.now();
     if(view==="scenario" && branchChoice===null && flow && !isReview() && answerStarted===null)answerStarted=performance.now();
     if(active && !active.done && active.item.type==="questions" && reviewIndex===null){
-      const button=document.createElement("button");button.disabled=true;button.textContent="Choose a response";dock.append(button);
+      const cue=document.createElement("p");cue.className="answer-cue muted";cue.textContent="Select an answer to see feedback.";dock.append(cue);
     }
     if(session){
       const available=Object.keys(session.answers || {}).map(Number).filter(i=>i>=(session.roundStart || 0) && i<session.index).sort((a,b)=>a-b);
@@ -481,7 +508,8 @@
         if (!allIds.includes(id) || !item || counters.some(k => !Number.isInteger(item[k]) || item[k] < 0) ||
             (item.reasonable !== undefined && (!Number.isInteger(item.reasonable) || item.reasonable < 0)) ||
             !Number.isFinite(item.due) || item.due < 0 || !["unaided","assisted","recognition","reasonable","missed"].includes(item.last) ||
-            (item.lastMisplacedC!==undefined && (!id.startsWith("r") || !Number.isInteger(item.lastMisplacedC) || item.lastMisplacedC<1 || item.lastMisplacedC>8 || id===`r${item.lastMisplacedC}` || !["assisted","missed"].includes(item.last)))) {
+            (item.lastMisplacedC!==undefined && (!id.startsWith("r") || !Number.isInteger(item.lastMisplacedC) || item.lastMisplacedC<1 || item.lastMisplacedC>8 || id===`r${item.lastMisplacedC}` || !["assisted","missed"].includes(item.last))) ||
+            (item.lastRecallMiss!==undefined && (!id.startsWith("r") || !["passed","incorrect"].includes(item.lastRecallMiss) || !["assisted","missed"].includes(item.last) || item.lastMisplacedC!==undefined))) {
           throw new Error("Invalid saved item");
         }
         item.reasonable = item.reasonable ?? 0;
@@ -507,7 +535,7 @@
       s.previousRounds=window.PRACTICE.validBaselines(s.previousRounds)?s.previousRounds:{};
       if(s.completedModes!==undefined && !P.validCompletedModes(s.completedModes))storageError("Previous completion history could not be opened. Saved answers are unchanged.");
       s.completedModes=P.validCompletedModes(s.completedModes)?s.completedModes:{};
-      for(const mode of [...Object.keys(s.previousRounds),...Object.entries(s.practices).filter(([,p])=>p.completed).map(([mode])=>mode)]){
+      for(const mode of [...Object.keys(s.previousRounds),...Object.entries(s.practices).filter(([,p])=>p.completed && p.snapshot?.session?.retry!==true).map(([mode])=>mode)]){
         if(!s.completedModes[mode]){s.completedModes[mode]=true;needsPracticeMigration=true;}
       }
       for(const [mode,saved] of Object.entries(s.practices)){
@@ -534,14 +562,16 @@
       if(localStorage.getItem(KEY)!==lastStored){saveFailed=true;storageError("Study data changed in another tab. Keep this tab open and copy any work you need before refreshing. This tab will not overwrite the other tab's saved work.");return false;}
       const recovering=saveFailed,text=JSON.stringify(state);localStorage.setItem(KEY,text);lastStored=text;saveFailed=false;if(recovering)warning.hidden=true;return true;
     }
-    catch { saveFailed=true; storageError("Your browser couldn't save your progress or exam answers. Keep this tab open. Refreshing or closing it may lose your work. In Exam rehearsal, choose Save a text copy for a backup."); return false; }
+    catch { saveFailed=true; storageError("Your browser couldn't save your progress or written answers. Keep this tab open. Refreshing or closing it may lose your work. In Written competency rehearsal, choose Save a text copy for a backup."); return false; }
   }
-  function record(id, outcome, misplacedC=null) {
+  function record(id, outcome, misplacedC=null, recallMiss=null) {
     const p = state.items[id] || {unaided:0, assisted:0, recognition:0, reasonable:0, missed:0, streak:0};
     p[outcome]++;
     p.last = outcome;
     delete p.lastMisplacedC;
+    delete p.lastRecallMiss;
     if(misplacedC)p.lastMisplacedC=misplacedC;
+    if(recallMiss)p.lastRecallMiss=recallMiss;
     const success = outcome === "unaided" || outcome === "recognition" || outcome === "reasonable";
     p.streak = success ? p.streak + 1 : 0;
     const days = [1,3,7][Math.min(p.streak - 1,2)];
@@ -631,15 +661,15 @@
   }
   function renderHome() {
     const items=practiceItems();
-    main.innerHTML = `<section class="hero"><div><p class="eyebrow">ICF core competencies · 2025</p><h1>The eight ICF<br>core competencies</h1><p class="lead">Practice the names from memory, explore coaching choices in questions or try a written exam rehearsal.</p></div><div class="orbit" aria-hidden="true"><strong class="coachprep-logo"></strong>${Array.from({length:8},(_,i)=>`<span style="left:${50+42*Math.cos((i-1)*Math.PI/4)}%;top:${50+42*Math.sin((i-1)*Math.PI/4)}%">${i+1}</span>`).join("")}</div></section>
+    main.innerHTML = `<section class="hero"><div><p class="eyebrow">ICF core competencies · 2025</p><h1>The eight ICF<br>core competencies</h1><p class="lead">Practice the names from memory, explore coaching choices in questions or try a written competency rehearsal.</p></div><div class="orbit" aria-hidden="true"><strong class="coachprep-logo"></strong>${Array.from({length:8},(_,i)=>`<span style="left:${50+42*Math.cos((i-1)*Math.PI/4)}%;top:${50+42*Math.sin((i-1)*Math.PI/4)}%">${i+1}</span>`).join("")}</div></section>
       <section class="practice-setup" aria-labelledby="practice-setup-title"><h2 id="practice-setup-title">Choose your practice</h2>
       <section class="grid practice-grid" aria-label="Name and question practice">
       <article class="experience"><span class="number">01 / CORE COMPETENCIES</span><h3>Core competency recall</h3><p>Try to name each from memory. First letter, Next word and Core word offer clues; Pass shows the full name.</p><button data-start="recall">Practice Core Competencies</button></article>
       <article class="experience"><span class="number">02 / QUESTIONS</span><h3>Coaching questions</h3><p>${D.questions.length} fictional scenarios, each with four possible replies. More than one response may fit; choose the strongest for the moment.</p><button data-start="questions">${state.practices.questions && !state.practices.questions.completed?"Resume questions":"Answer questions"}</button></article></section>
       <div class="mixed-start"><button class="primary" id="start-mixed">${state.practices.mixed && !state.practices.mixed.completed?"Resume mixed practice":"Start mixed practice"}</button><p class="muted">Eight items across all competencies, mixing names and questions.</p></div>
-      <details class="review-list"><summary>Your review dates · ${items.length} items</summary><p class="muted">Your last result and next review for each name and scenario. "New" means you haven't tried it. You can practice any time.</p>${items.map(item=>`<div class="review-row"><span>${item.type==="recall"?titleLabel(comp(item.c)):escape(D.questions.find(q=>q.id===item.id).label)}<small>${item.type==="recall"?"Core competency recall":"Coaching scenario"}${state.items[item.id] ? ` · last time: ${state.items[item.id].lastMisplacedC?`Recognized competency, wrong order (C${state.items[item.id].lastMisplacedC})${state.items[item.id].last==="assisted"?" · with hints":""}`:outcomeLabels[state.items[item.id].last]}` : ""}</small></span><span>${dueLabel(item.id)}</span></div>`).join("")}</details></section>
-      <section class="independent-practice" aria-labelledby="independent-title"><h2 id="independent-title">Exam practice</h2>
-      <article class="experience"><span class="number">WRITTEN EXAM</span><h3>Exam rehearsal</h3><p>${escape(D.examInstruction)}</p><button data-start="exam">${state.exam?.status==="draft"?"Resume rehearsal":state.exam?"Review rehearsal":"Start exam rehearsal"}</button></article></section>
+      <details class="review-list"><summary>Your review dates · ${items.length} items</summary><p class="muted">Your last result and next review for each name and scenario. "New" means you haven't tried it. You can practice any time.</p>${items.map(item=>`<div class="review-row"><span>${item.type==="recall"?titleLabel(comp(item.c)):escape(D.questions.find(q=>q.id===item.id).label)}<small>${item.type==="recall"?"Core competency recall":"Coaching scenario"}${state.items[item.id] ? ` · last time: ${state.items[item.id].lastMisplacedC?`Recognized competency, wrong order (C${state.items[item.id].lastMisplacedC})${state.items[item.id].last==="assisted"?" · with hints":""}`:state.items[item.id].lastRecallMiss?P.recallMissLabel({revealed:state.items[item.id].lastRecallMiss==="passed",matched:false}):outcomeLabels[state.items[item.id].last]}` : ""}</small></span><span>${dueLabel(item.id)}</span></div>`).join("")}</details></section>
+      <section class="independent-practice" aria-labelledby="independent-title"><h2 id="independent-title">Written practice</h2>
+      <article class="experience"><span class="number">2025 COMPETENCY STUDY</span><h3>Written competency rehearsal</h3><p>${escape(D.examInstruction)}</p><p>${escape(D.writingScope)}</p>${window.EXAM.guidance(escape)}<button data-start="exam">${state.exam?.status==="draft"?"Resume written rehearsal":state.exam?"Review written rehearsal":"Start written rehearsal"}</button></article></section>
       <h2 class="progress-heading">Across all your practice</h2><section class="stats question-credit-stats" aria-label="Core competency recall and question credit counts"><div class="stat"><strong>${totals("unaided")}</strong><span>Without hints</span></div><div class="stat"><strong>${totals("assisted")}</strong><span>With hints</span></div><div class="stat"><strong>${totals("recognition")}</strong><span>Strongest option</span></div><div class="stat"><strong>${totals("reasonable")}</strong><span>Valid approach</span></div></section>
       ${legacyQuestionIds.some(id=>state.items[id])?'<p class="muted">Earlier question results remain in your all-time counts. The new scenarios have their own review dates.</p>':""}
       <div class="reset-line"><span>Saved in this browser.</span><button id="reset">Reset progress</button></div>`;
@@ -674,6 +704,13 @@
     view=type==="mixed"?"recall":type;
     active=null; render(); focus(".scenario-prompt,.recall-prompt");
   }
+  function startRecallRetry(ids) {
+    openShell();beginFlow("recall");
+    const items=ids.map(c=>({id:`r${c}`,type:"recall",c}));
+    session={items,index:0,results:[],type:"recall",roundStart:0,roundEnd:items.length,retry:true};
+    usage?.begin("titles");view="recall";active=null;
+    render();focus(".recall-prompt");animatePracticeEntry("start");
+  }
   function currentItem() {
     if (session) return session.items[session.index];
     const items=practiceItems(view);
@@ -700,7 +737,7 @@
     const a=reviewIndex!==null?session.answers[reviewIndex]:active, c=comp(a.item.c);
     const misplaced=P.recallMisplacement(a,D.competencies,normalizeTitle);
     const outcome=P.recallOutcome({...a,c:c.id,...(misplaced?{misplacedC:misplaced.id}:{})});
-    const feedbackHeading=outcome==="missed"?"Wrong / passed":outcome==="misplaced"?"Recognized competency, wrong order":a.successMessage || "Correct!";
+    const feedbackHeading=outcome==="missed"?P.recallMissLabel(a):outcome==="misplaced"?"Recognized competency, wrong order":a.successMessage || "Correct!";
     const feedbackIcon={unaided:"✓",assisted:"",misplaced:"&#8596;",missed:"×"}[outcome];
     const named=D.competencies.find(c=>normalizeTitle(c.title)===normalizeTitle(a.attempt));
     const submittedTitle=named?titleLabel(named,a.attempt):a.attempt;
@@ -742,15 +779,18 @@
         a.successMessage=hintedSuccessMessages[state.hintedSuccessIndex];
         state.hintedSuccessIndex=(state.hintedSuccessIndex+1)%hintedSuccessMessages.length;
       }
-      if(!a.assistLogged)record(a.item.id,a.outcome,a.misplacedC);
+      const recallMiss=!match && !misplaced?"incorrect":null;
+      if(!a.assistLogged)record(a.item.id,a.outcome,a.misplacedC,recallMiss);
       else {
         delete state.items[a.item.id].lastMisplacedC;
+        delete state.items[a.item.id].lastRecallMiss;
         if(misplaced)state.items[a.item.id].lastMisplacedC=misplaced.id;
+        if(recallMiss)state.items[a.item.id].lastRecallMiss=recallMiss;
         if(!match)state.items[a.item.id].missed++;
         persist();
       }
       if (!session) usage?.item("titles",a.item.id,D.competencies.length);
-      renderRecall(); focusRecallContinue(); announce(match?`${a.successMessage || "Correct!"} ${titleLabel(c)}.${a.successMessage?` With hints. ${hintedSuccessSupport}`:""}`:misplaced?`Recognized competency, wrong order. You remembered C${misplaced.id}. This position asks for ${titleLabel(c)}.`:"Wrong / passed. The wording doesn't match. Check the official name against your answer.");
+      renderRecall(); focusRecallContinue(); announce(match?`${a.successMessage || "Correct!"} ${titleLabel(c)}.${a.successMessage?` With hints. ${hintedSuccessSupport}`:""}`:misplaced?`Recognized competency, wrong order. You remembered C${misplaced.id}. This position asks for ${titleLabel(c)}.`:"Name did not match. Check the official name against your answer.");
     };
     document.querySelectorAll("[data-hint]").forEach(button=>button.onclick=()=>{
       if(a.done)return;
@@ -769,9 +809,10 @@
       a.revealed=true;a.done=true;a.outcome="assisted";
       noteActive();
       usage?.count?.(usageMode(flow.mode),"passes");
-      if(!a.assistLogged){record(a.item.id,"assisted");a.assistLogged=true;}
+      if(!a.assistLogged){record(a.item.id,"assisted",null,"passed");a.assistLogged=true;}
+      else {delete state.items[a.item.id].lastMisplacedC;state.items[a.item.id].lastRecallMiss="passed";}
       if (!session) usage?.item("titles",a.item.id,D.competencies.length);
-      renderRecall();focusRecallContinue();announce(`Wrong / passed. The official name is ${titleLabel(c)}.`);
+      renderRecall();focusRecallContinue();announce(`Pass: answer revealed. The official name is ${titleLabel(c)}.`);
     };
     document.querySelector("#study-card").insertAdjacentHTML("beforeend",'<details class="practice-help" open><summary>Practice help</summary><p>Try the name from memory. First letter, Next word and Core word offer different clues. Pass reveals the name. Hints and Pass count as assisted practice. Capitalization and surrounding punctuation do not affect the check.</p></details>');
     updateShell();persist();
@@ -786,7 +827,7 @@
     const improve='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18L18 6M9 6H18V15"/></svg>';
     document.querySelector("#study-card").innerHTML=`${a.done?`<details class="review-question"><summary>Question: ${escape(q.label)}</summary><h2 class="scenario-prompt">${escape(q.prompt)}</h2></details>`:`<h2 class="scenario-prompt">${escape(q.prompt)}</h2>`}
       <div class="options${a.done && revealFeedback?" feedback-enter":""}">${order.map(i=>{const o=q.options[i],position=a.optionOrder.indexOf(i);return a.done?
-        `<details class="answer-card ${o[2]} ${a.selected===i?"selected":""}" data-answer="${i}" open><summary><span class="letter">${"ABCD"[position]}</span><span class="option-content">${i===a.selected?'<span class="chosen-marker">Your choice</span>':""}<span class="option-text">${escape(o[0])}</span><span class="result-tag">${o[2]==="less"?improve:check}${creditLabels[o[2]]}</span></span></summary><div class="rationale-panel"><hr><p>${escape(o[1])}</p></div></details>`:
+        `<details class="answer-card ${o[2]} ${a.selected===i?"selected":""}" data-answer="${i}" open><summary><span class="letter">${"ABCD"[position]}</span><span class="option-content">${i===a.selected?'<span class="chosen-marker">Your choice</span>':""}<span class="option-text">${escape(o[0])}</span><span class="result-tag">${o[2]==="less"?improve:check}${creditLabels[o[2]]}</span></span></summary><div class="rationale-panel"><hr><p>${escape(o[1])}</p>${q.ethicsRefs?.length?`<p><a href="https://coachingfederation.org/resource/icf-code-of-ethics/" target="_blank" rel="noopener noreferrer">ICF Code of Ethics, ${q.ethicsRefs.length===1?"standard":"standards"} ${q.ethicsRefs.join(" and ")} (opens a new tab)</a></p>`:""}</div></details>`:
         `<button class="option" data-option="${i}"><span class="letter">${"ABCD"[position]}</span><span class="option-text">${escape(o[0])}</span></button>`;}).join("")}</div>
       ${a.done?`<details class="competency-reference"><summary>What competency is at play?</summary><h3>${titleLabel(c)}</h3><p class="definition-label">Official definition</p><blockquote class="competency-definition">"${escape(c.definition)}"</blockquote><p>${escape(q.takeaway)}</p>${citation(c.id,q.refs)}${q.also?.map(other=>`<h4>${titleLabel(comp(other.c))}</h4>${citation(other.c,other.refs)}`).join("") || ""}</details><button class="primary" id="next-item">Next question</button>`:
       '<details class="practice-help" open><summary>Practice help</summary><p>More than one response may fit. Choose the strongest option for this moment. After answering, compare the reasoning for each response.</p></details>'}`;
@@ -873,10 +914,10 @@
   };
   const base=document.currentScript?.src || location.href;
   const assets=[
-    ["practice.js?v=6",window.PRACTICE?.uiVersion===6],
-    ["exam.js?v=13",window.EXAM?.uiVersion===13],
-    ["content.js?v=11",window.STUDY?.uiVersion===11],
-    ["styles.css?v=23",!!document.querySelector('link[href="styles.css?v=23"]')]
+    ["practice.js?v=7",window.PRACTICE?.uiVersion===7],
+    ["exam.js?v=14",window.EXAM?.uiVersion===14],
+    ["content.js?v=12",window.STUDY?.uiVersion===12],
+    ["styles.css?v=24",!!document.querySelector('link[href="styles.css?v=24"]')]
   ].filter(([,ready])=>!ready);
   if(!assets.length)start();
   else Promise.all(assets.map(([source])=>new Promise((resolve,reject)=>{

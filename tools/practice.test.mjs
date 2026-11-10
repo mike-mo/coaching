@@ -7,25 +7,152 @@ vm.runInNewContext(readFileSync(new URL("../practice.js",import.meta.url),"utf8"
 vm.runInNewContext(readFileSync(new URL("../content.js",import.meta.url),"utf8"),context);
 vm.runInNewContext(readFileSync(new URL("../exam.js",import.meta.url),"utf8"),context);
 const P=context.window.PRACTICE,D=context.window.STUDY;
-function summaryMarkup(result,active=null){
+function summaryMarkup(result,active=null,inspect=null){
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
   const renderer=app.slice(app.indexOf("function renderSummary("),app.indexOf("function updateShell("));
   const main={innerHTML:""},controls=new Map();
-  const sandbox={P,D,main,result,state:{exam:null,practices:{}},active,
+  const sandbox={P,D,main,result,state:{exam:null,practices:{[result.mode]:result}},active,
+    localStorage:{getItem:()=>null},KEY:"study",lastStored:null,
     modeNames:{recall:"Core competency recall",questions:"Questions",mixed:"Mixed practice"},
     comp:id=>D.competencies.find(c=>c.id===id),titleLabel:context.window.EXAM.titleLabel,
     normalizeTitle:context.window.EXAM.normalizeTitle,escape:value=>value,coffee:{eligible:()=>false},
     updateNavigation:()=>{},focus:()=>{},
     document:{querySelector:selector=>{
       if(selector==="#dismiss-coffee")return null;
+      if(["#retry-recall","#include-hinted"].includes(selector) && !main.innerHTML.includes(`id="${selector.slice(1)}"`))return null;
       if(!controls.has(selector))controls.set(selector,{append:()=>{}});
       return controls.get(selector);
     },createElement:()=>({})}};
   vm.createContext(sandbox);
   vm.runInContext(renderer,sandbox);
   vm.runInContext("renderSummary(result)",sandbox);
+  inspect?.({controls,sandbox});
   return main.innerHTML;
 }
+test("Pass and nonmatching names have distinct missed labels without guessing legacy intent",()=>{
+  assert.equal(P.recallMissLabel({revealed:true,matched:false,outcome:"assisted"}),"Pass: answer revealed");
+  assert.equal(P.recallMissLabel({revealed:false,matched:false,outcome:"assisted"}),"Name did not match");
+  assert.equal(P.recallMissLabel({outcome:"assisted"}),"Needs another look");
+  assert.equal(P.recallMissLabel({matched:false,outcome:"assisted"}),"Needs another look");
+  assert.equal(P.recallMissLabel(null),"Needs another look");
+});
+test("retry and review share the cross-tab/storage guard without overwriting newer work",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const fn=app.slice(app.indexOf("function storedRoundIsCurrent("),app.indexOf("function updateShell("));
+  const saved={},calls=[],sandbox={state:{practices:{recall:saved}},KEY:"study",lastStored:"before",
+    localStorage:{getItem:()=>"before"},storageError:()=>calls.push("warning"),refreshStoredProgress:()=>calls.push("refresh")};
+  vm.createContext(sandbox);vm.runInContext(fn,sandbox);sandbox.saved=saved;
+  assert.equal(vm.runInContext('storedRoundIsCurrent("recall",saved)',sandbox),true);
+  sandbox.localStorage.getItem=()=>"after";
+  assert.equal(vm.runInContext('storedRoundIsCurrent("recall",saved)',sandbox),false);
+  assert.deepEqual(calls,["refresh"]);
+  sandbox.localStorage.getItem=()=>{throw Error("blocked");};
+  assert.equal(vm.runInContext('storedRoundIsCurrent("recall",saved)',sandbox),false);
+  assert.deepEqual(calls,["refresh","warning"]);
+  assert.equal(sandbox.state.practices.recall,saved);
+});
+test("completed recall offers only actual missed competencies plus optional hinted correct ones",()=>{
+  const rows=[
+    {c:1,matched:false,revealed:true,outcome:"assisted",score:0},
+    {c:2,matched:true,revealed:false,outcome:"assisted",score:3},
+    {c:3,matched:false,revealed:false,outcome:"missed",misplacedC:5,score:1},
+    {c:4,matched:true,revealed:false,outcome:"unaided",score:10},
+    {c:5,matched:false,revealed:false,outcome:"missed",score:0},
+    ...[6,7,8].map(c=>({c,matched:true,revealed:false,outcome:"unaided",score:10}))
+  ].map(r=>({type:"recall",seconds:1,...r}));
+  const result={mode:"recall",completed:true,elapsedMs:8000,responses:rows,snapshot:{}};
+  const targets=P.recallRetryTargets(rows);
+  assert.deepEqual(Array.from(targets.missed,r=>r.c),[1,3,5]);
+  assert.deepEqual(Array.from(targets.assisted,r=>r.c),[2]);
+  const html=summaryMarkup(result,null,({controls,sandbox})=>{
+    const button=controls.get("#retry-recall"),checkbox=controls.get("#include-hinted");
+    let started=null;sandbox.startRecallRetry=ids=>{started=Array.from(ids);};
+    button.onclick();assert.deepEqual(started,[1,3,5]);
+    checkbox.checked=true;checkbox.onchange();
+    assert.equal(button.textContent,"Practice these 4 competencies");
+    button.onclick();assert.deepEqual(started,[1,3,5,2]);
+    checkbox.checked=false;checkbox.onchange();
+    assert.equal(button.textContent,"Practice these 3 competencies");
+    assert.equal(result.responses[1].score,3,"Selecting a retry never changes an earlier score");
+  });
+  assert.match(html,/4 of 8 competencies recalled without hints/);
+  assert.match(html,/55%/);
+  assert.match(html,/C1\. Demonstrates Ethical Practice \(passed\)/);
+  assert.match(html,/C3\. Establishes and Maintains Agreements \(wrong position\)/);
+  assert.match(html,/C5\. Maintains Presence \(name did not match\)/);
+  assert.match(html,/Include C2\. Embodies a Coaching Mindset, recalled with hints/);
+  assert.doesNotMatch(html,/<input[^>]+checked/);
+  assert.match(html,/Practice these 3 competencies/);
+  for(const patch of [{completed:false},{mode:"mixed"},{mode:"questions"}]){
+    assert.doesNotMatch(summaryMarkup({...result,...patch}),/id="retry-recall"/);
+  }
+  const allCorrect=rows.map(r=>({...r,matched:true,revealed:false,outcome:"unaided",score:10}));
+  assert.doesNotMatch(summaryMarkup({...result,responses:allCorrect}),/id="retry-recall"/);
+  const onlyHinted=allCorrect.map((r,i)=>i===1?{...r,outcome:"assisted",score:6}:r);
+  const hintedHtml=summaryMarkup({...result,responses:onlyHinted},null,({controls})=>{
+    const checkbox=controls.get("#include-hinted"),button=controls.get("#retry-recall");
+    checkbox.checked=true;checkbox.onchange();
+    assert.equal(button.disabled,false);
+    assert.equal(button.textContent,"Practice this competency");
+    checkbox.checked=false;checkbox.onchange();
+    assert.equal(button.disabled,true);
+  });
+  assert.match(hintedHtml,/id="retry-recall" class="primary" disabled/);
+  const legacy=rows.map(({matched,revealed,...r})=>r);
+  assert.doesNotMatch(summaryMarkup({...result,responses:legacy}),/recalled without hints|id="retry-recall"/);
+});
+test("targeted retry keeps its actual denominator and never replaces full-round comparisons",()=>{
+  const responses=[1,3,5].map(c=>({c,type:"recall",outcome:"unaided",matched:true,revealed:false,seconds:1,score:10}));
+  const saved={mode:"recall",completed:true,elapsedMs:3000,responses,snapshot:{session:{retry:true}}};
+  assert.equal(P.recallScore(saved).earned,30);
+  assert.equal(P.recallScore(saved).maximum,30);
+  assert.equal(P.recallPercentage(saved),null);
+  assert.equal(P.roundMetric(saved),null);
+  assert.equal(P.roundMetric({...saved,responses:D.competencies.map(c=>({...responses[0],c:c.id}))}),null);
+  const html=summaryMarkup(saved);
+  assert.match(html,/Targeted recall retry · Finished/);
+  assert.match(html,/3 of 3 competencies recalled without hints/);
+  assert.match(html,/<strong>30 \/ 30<\/strong><span>Retry points earned/);
+  assert.doesNotMatch(html,/Recall points earned|%|\/ 80/);
+  assert.match(html,/Start a new round/);
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const fn=app.slice(app.indexOf("function recordCompletion("),app.indexOf("function confetti("));
+  const previous={recall:{scheme:"recall-unaided-v1",score:.5}},completedModes={recall:true};
+  const sandbox={flow:{completed:true},session:{retry:true},state:{previousRounds:previous,completedModes},stash:()=>{}};
+  vm.createContext(sandbox);vm.runInContext(fn,sandbox);
+  const completion=vm.runInContext("recordCompletion()",sandbox);
+  assert.equal(completion.celebrate,false);
+  assert.equal(sandbox.state.previousRounds,previous);
+  assert.equal(sandbox.state.completedModes,completedModes);
+  assert.equal(vm.runInContext("recordCompletion()",sandbox),null,"Reload and review cannot record another completion");
+});
+test("targeted retry metadata and its locked answers survive validation and reload",()=>{
+  const items=[1,3].map(c=>({id:`r${c}`,type:"recall",c}));
+  const active={item:items[0],attempt:"A fictional draft",hints:1,done:false,revealed:false,assistLogged:true,optionOrder:null};
+  const saved={version:1,mode:"recall",completed:false,elapsedMs:1000,answerMs:200,responses:[],
+    snapshot:{view:"recall",history:[],scenarioNode:D.scenario.start,branchChoice:null,reviewIndex:null,active,
+      session:{type:"recall",items,index:0,roundStart:0,roundEnd:2,retry:true,results:[],answers:{}}}};
+  assert.equal(P.validSaved(saved,D),true);
+  assert.equal(P.validSaved(JSON.parse(JSON.stringify(saved)),D),true);
+  for(const change of [
+    p=>p.snapshot.session.retry="yes",
+    p=>p.snapshot.session.retry=false,
+    p=>p.snapshot.session.roundStart=1,
+    p=>p.snapshot.session.roundEnd=1,
+    p=>p.mode="mixed"
+  ]){
+    const copy=JSON.parse(JSON.stringify(saved));change(copy);assert.equal(P.validSaved(copy,D),false);
+  }
+  const completed=JSON.parse(JSON.stringify(saved));
+  completed.completed=true;completed.snapshot.active=null;completed.snapshot.session.index=2;
+  completed.responses=items.map(item=>({c:item.c,type:"recall",matched:true,revealed:false,outcome:"assisted",seconds:1,score:6,scoreVersion:2,hintCount:1}));
+  completed.snapshot.session.results=items.map(()=>({type:"recall",outcome:"assisted",missed:false}));
+  completed.snapshot.session.answers=Object.fromEntries(items.map((item,i)=>[i,{...active,item,attempt:D.competencies[item.c-1].title,done:true,reported:true,matched:true,outcome:"assisted"}]));
+  assert.equal(P.validSaved(JSON.parse(JSON.stringify(completed)),D),true);
+  assert.equal(P.recallScore(completed).earned,12);
+  completed.snapshot.reviewIndex=0;
+  assert.equal(P.validSaved(completed,D),true);
+});
 test("recall summary uses the actual match and Pass, not assisted review credit alone",()=>{
   assert.equal(P.recallOutcome(null),null);
   assert.equal(P.recallOutcome({outcome:"unaided",matched:true,revealed:false}),"unaided");
@@ -378,7 +505,9 @@ test("recall feedback focuses Continue and echoes only wrong submitted answers",
       else assert.doesNotMatch(card.innerHTML,/Your answer:/);
       if(kind.includes("wrong") || kind.includes("pass")){
         assert.match(card.innerHTML,/feedback recall-missed/);
-        assert.match(card.innerHTML,/Wrong \/ passed/);
+        assert.match(card.innerHTML,kind.includes("pass")?/Pass: answer revealed/:/Name did not match/);
+        assert.match(announced,kind.includes("pass")?/Pass: answer revealed/:/Name did not match/);
+        assert.doesNotMatch(announced,/Correct|You got it|Nice work|That's it/);
         assert.doesNotMatch(card.innerHTML,/class="pill">With hints/);
       }else if(kind.includes("misplaced")){
         assert.match(card.innerHTML,/feedback recall-misplaced/);
@@ -483,7 +612,7 @@ test("external progress updates refresh idle results but preserve active drafts 
 test("saved answer review rejects removed or replaced rounds, including before a storage event",()=>{
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
   const start=app.indexOf("reviewButton.onclick=()=>{"),end=app.indexOf('document.querySelector(".summary-actions").append',start);
-  const handler=app.slice(start,end);
+  const handler=app.slice(app.indexOf("function storedRoundIsCurrent("),app.indexOf("function updateShell("))+app.slice(start,end);
   for(const kind of ["missing","replaced","external","unavailable","valid"]){
     const saved={snapshot:{}},button={},calls=[];
     const sandbox={reviewButton:button,savedRound:kind==="missing"?undefined:saved,
@@ -582,7 +711,9 @@ test("study toolbar keeps Back, Pass/Next and Submit/Continue/Return in fixed sl
   }
   assert.equal(toolbar({index:0}).dock.children.find(b=>b.id==="review-previous").hidden,true);
   assert.equal(toolbar({done:true}).dock.children.find(b=>b.id==="next-item").textContent,"Continue");
-  assert.equal(toolbar({questions:true}).dock.children.find(b=>b.textContent==="Choose a response").disabled,true);
+  const cue=toolbar({questions:true}).dock.children.find(b=>b.textContent==="Select an answer to see feedback.");
+  assert.equal(cue.className,"answer-cue muted");
+  assert.equal(cue.disabled,undefined);
   assert.equal(toolbar({reviewIndex:2,completed:true}).dock.children.find(b=>b.id==="review-return").textContent,"Back to results");
   const css=readFileSync(new URL("../styles.css",import.meta.url),"utf8");
   assert.match(css,/#study-dock\.item-navigation\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
@@ -658,7 +789,7 @@ test("C3 consolation summaries distinguish wrong order in recall, Mixed and evid
   }
   const legacy={...response};delete legacy.misplacedC;
   const base={mode:"recall",completed:false,elapsedMs:2000,responses:[legacy],snapshot:{}};
-  assert.match(summaryMarkup(base),/Wrong \/ passed/);
+  assert.match(summaryMarkup(base),/Name did not match/);
   assert.doesNotMatch(summaryMarkup(base),/Recognized competency, wrong order/);
   const answer={item:{id:"r3",type:"recall",c:3},matched:false,revealed:false,attempt:D.competencies[1].title};
   assert.match(summaryMarkup({...base,snapshot:{session:{answers:{0:answer}}}}),/Recognized competency, wrong order/);
@@ -668,7 +799,7 @@ test("C3 consolation summaries distinguish wrong order in recall, Mixed and evid
     const clean={...row};delete clean.misplacedC;
     const html=summaryMarkup({...base,responses:[clean]});
     assert.doesNotMatch(html,/Recognized competency, wrong order/);
-    assert.match(html,clean.matched?/Used hints/:/Wrong \/ passed/);
+    assert.match(html,clean.matched?/Used hints/:/Pass: answer revealed/);
   }
 });
 test("whole-number recall percentage stays by the completed heading and uses saved earned scores",()=>{
@@ -694,8 +825,8 @@ test("recall and Mixed summaries give Pass and incorrect guesses error priority 
       const response={c:4,type:"recall",seconds:1,...row};
       const html=summaryMarkup({mode,completed:false,elapsedMs:1000,responses:[response],snapshot:{}});
       assert.match(html,new RegExp(`competency-stat  recall-${row.expected}`));
-      if(row.expected==="missed")assert.match(html,/Wrong \/ passed/);
-      else assert.doesNotMatch(html,/Wrong \/ passed/);
+      if(row.expected==="missed")assert.match(html,row.revealed?/Pass: answer revealed/:/Name did not match/);
+      else assert.doesNotMatch(html,/Pass: answer revealed|Name did not match/);
     }
   }
 });
@@ -711,6 +842,7 @@ test("shared study summaries put actions before totals and hide unfinished recal
         updateNavigation:()=>{},focus:()=>{},
         document:{querySelector:selector=>{
           if(selector==="#dismiss-coffee")return null;
+          if(["#retry-recall","#include-hinted"].includes(selector))return null;
           if(!controls.has(selector))controls.set(selector,{});
           return controls.get(selector);
         }}};
