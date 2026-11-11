@@ -80,7 +80,8 @@ test("question feedback stays conditional and all four classifications have rati
   assert.match(question, /a\.done\?`<details class="review-question"/);
   assert.match(question, /"ABCD"\[position\]/);
   assert.match(question, /class="answer-card/);
-  assert.match(question, /What competency is at play/);
+  assert.match(question, /Bonus exercise: which competencies and markers are at play\?/);
+  assert.match(question, /class="bonus-invitation-help">Think it through, then expand to review\./);
   assert.match(question, /class="rationale-panel"><hr>/);
   assert.doesNotMatch(question, /:citation\(q\.c/);
   assert.match(app, /outcome === "reasonable"/);
@@ -112,12 +113,15 @@ test("Questions and mixed feedback retain every displayed option position in sav
           }
         };
         vm.createContext(sandbox);
+        vm.runInContext(app.slice(app.indexOf("const officialReferences ="),app.indexOf("const announce =")),sandbox);
+        vm.runInContext("setupBonusSources=()=>{}",sandbox);
         vm.runInContext(renderer, sandbox);
         const displayedOrder = () => Array.from(card.innerHTML.matchAll(/data-(?:option|answer)="(\d)"/g), match => Number(match[1]));
         const letters = () => Array.from(card.innerHTML.matchAll(/class="letter">([A-D])/g), match => match[1]);
         vm.runInContext("renderQuestion()", sandbox);
         assert.deepEqual(displayedOrder(), order);
         const beforeLetters = letters();
+        assert.doesNotMatch(card.innerHTML,/class="competency-reference"/);
         const submit = buttons.find(b => Number(b.dataset.option) === selected).onclick;
         submit();
         assert.deepEqual(displayedOrder(), order);
@@ -126,6 +130,23 @@ test("Questions and mixed feedback retain every displayed option position in sav
         assert.equal((card.innerHTML.match(/Your choice/g) || []).length, 1);
         assert.match(card.innerHTML, new RegExp(`selected" data-answer="${selected}"`));
         assert.equal((card.innerHTML.match(/class="rationale-panel"/g) || []).length, 4);
+        const reflection=card.innerHTML.indexOf('<details class="competency-reference">');
+        const strongest=card.innerHTML.indexOf(`data-answer="${q.answer}"`);
+        assert.ok(reflection>strongest);
+        const strongestBody=card.innerHTML.slice(strongest,reflection);
+        assert.doesNotMatch(strongestBody,/<\/details>/,"Reflection belongs inside the strongest explanation, not a later card");
+        assert.ok(strongestBody.includes(q.options[q.answer][1]));
+        assert.equal((card.innerHTML.match(/class="competency-reference"/g) || []).length,1);
+        assert.doesNotMatch(card.innerHTML,/<details class="competency-reference"[^>]*open/);
+        assert.match(card.innerHTML,/<summary><span>Bonus exercise: which competencies and markers are at play\?<\/span><span class="bonus-invitation-help">Think it through, then expand to review\.<\/span><\/summary>/);
+        assert.doesNotMatch(card.innerHTML,/Official definition|class="definition-label"/);
+        assert.ok(card.innerHTML.includes(`<blockquote class="competency-definition">${data.competencies.find(c=>c.id===q.c).definition}</blockquote>`));
+        for(const entry of [{c:q.c,refs:q.refs},...(q.also || [])]){
+          assert.ok(card.innerHTML.includes(`id="bonus-source-${entry.c}" class="source-info-panel" popover="auto" role="dialog"`));
+          assert.ok(card.innerHTML.includes(`PDF p. ${entry.c+2}`));
+          assert.ok(card.innerHTML.includes(data.source));assert.ok(card.innerHTML.includes(data.version));
+          for(const ref of entry.refs)assert.ok(card.innerHTML.includes(`<li><strong>${ref}</strong> ${data.subcompetencies[ref]}</li>`));
+        }
         assert.equal(a.outcome, q.options[selected][2] === "strongest" ? "recognition" : q.options[selected][2] === "reasonable" ? "reasonable" : "missed");
         submit();
         assert.equal(writes, 1);
@@ -136,6 +157,7 @@ test("Questions and mixed feedback retain every displayed option position in sav
         assert.deepEqual(displayedOrder(), order);
         assert.deepEqual(letters(), beforeLetters);
         assert.doesNotMatch(card.innerHTML, /feedback-enter|data-option=/);
+        assert.equal((card.innerHTML.match(/class="competency-reference"/g) || []).length,1);
         sandbox.reviewIndex = null;
         vm.runInContext("renderQuestion()", sandbox);
         assert.doesNotMatch(card.innerHTML, /feedback-enter/, "Resumed feedback does not replay motion");
@@ -143,9 +165,92 @@ test("Questions and mixed feedback retain every displayed option position in sav
     }
   }
 });
+test("bonus source controls keep compact visible text, accessible metadata and original citations elsewhere",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8"),sandbox={D:data,
+    escape:value=>String(value),comp:id=>data.competencies.find(c=>c.id===id),titleLabel:c=>`C${c.id}. ${c.title}`};
+  vm.createContext(sandbox);
+  vm.runInContext(app.slice(app.indexOf("const officialReferences ="),app.indexOf("const announce =")),sandbox);
+  for(const c of data.competencies){
+    const ref=Object.keys(data.subcompetencies).find(ref=>ref.startsWith(`${c.id}.`));
+    sandbox.c=c;sandbox.ref=ref;
+    const heading=vm.runInContext("bonusHeading(c.id,[ref])",sandbox);
+    assert.ok(heading.includes(`<h3>C${c.id}. ${c.title}</h3>`));
+    assert.ok(heading.includes(`aria-label="Source information for C${c.id}. ${c.title}"`));
+    assert.match(heading,/aria-haspopup="dialog" aria-expanded="false" aria-controls="bonus-source-/);
+    assert.match(heading,/Official ICF competency resource \(opens a new tab\)/);
+    assert.match(heading,/class="source-info-close">Close source information/);
+    assert.ok(heading.includes(`PDF p. ${c.id+2}`));
+    const old=vm.runInContext("citation(c.id,[ref])",sandbox);
+    assert.ok(old.includes(`"${data.subcompetencies[ref]}"`),"Non-bonus citation formatting is unchanged");
+    const compact=vm.runInContext("officialReferences([ref],false)",sandbox);
+    assert.equal(compact,`<ul class="official-references"><li><strong>${ref}</strong> ${data.subcompetencies[ref]}</li></ul>`);
+  }
+  const css=readFileSync(new URL("../styles.css",import.meta.url),"utf8");
+  assert.match(css,/\.competency-definition\{[^}]*margin:4px 0 14px 12px;[^}]*font-style:italic;[^}]*line-height:1\.55/);
+  assert.match(css,/\.competency-reference \.official-references li\+li\{margin-top:6px\}/);
+  assert.match(css,/\.competency-reference \.bonus-invitation-help\{[^}]*display:block;[^}]*font-weight:400;[^}]*color:var\(--supporting\)/);
+});
+test("source popovers suppress focus reentry during native show and dismissal",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const helpers=app.slice(app.indexOf("const officialReferences ="),app.indexOf("const announce ="));
+  const element=()=>({handlers:{},addEventListener(name,fn){this.handlers[name]=fn;}});
+  const button=element(),panel=element(),wrapper=element(),closeButton=element(),attributes={},tasks=[];
+  let shown=false,changing=false,shows=0,prevents=0;
+  button.setAttribute=(key,value)=>{attributes[key]=value;};
+  button.focus=()=>button.handlers.focus();
+  button.getBoundingClientRect=()=>({left:40,bottom:80});
+  panel.isConnected=true;panel.style={};panel.matches=()=>shown;
+  panel.getBoundingClientRect=()=>({width:200,height:160});
+  panel.querySelector=()=>closeButton;
+  panel.showPopover=()=>{
+    assert.equal(changing,false,"Native popover operations cannot reenter");
+    changing=true;shows++;button.focus();shown=true;changing=false;
+    tasks.push(()=>panel.handlers.toggle());
+  };
+  panel.hidePopover=()=>{
+    changing=true;panel.handlers.beforetoggle({newState:"closed"});
+    shown=false;button.focus();changing=false;
+    tasks.push(()=>panel.handlers.toggle());
+  };
+  wrapper.querySelector=selector=>selector===".source-info-button"?button:panel;
+  wrapper.matches=()=>false;wrapper.contains=target=>target===button || target===panel;
+  const sandbox={D:data,main:{querySelectorAll:()=>[wrapper]},window:{innerWidth:390,innerHeight:740},
+    document:{activeElement:button},clearTimeout:()=>{},setTimeout:()=>0};
+  vm.createContext(sandbox);vm.runInContext(helpers,sandbox);vm.runInContext("setupBonusSources()",sandbox);
+  const flush=()=>{while(tasks.length)tasks.shift()();};
+  button.focus();flush();
+  assert.equal(shows,1);assert.equal(shown,true);assert.equal(attributes["aria-expanded"],"true");
+  wrapper.handlers.keydown({key:"Escape",preventDefault:()=>{prevents++;},stopPropagation:()=>{}});
+  flush();assert.equal(shown,false);assert.equal(shows,1);assert.equal(prevents,1);
+  button.handlers.click({preventDefault:()=>{}});flush();
+  assert.equal(shows,2);assert.equal(shown,true);
+  closeButton.handlers.click();flush();
+  assert.equal(shown,false);assert.equal(shows,2);
+  button.focus();flush();assert.equal(shows,3);
+  panel.hidePopover();flush();
+  assert.equal(shown,false);assert.equal(shows,3,"Outside/native dismissal does not reopen on restored focus");
+});
 
 test("feedback motion is brief, unstaggered and opt-in to normal motion preferences", () => {
   const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
   assert.match(css, /@media\(prefers-reduced-motion:no-preference\)\{\s*\.feedback-enter .chosen-marker,.feedback-enter .result-tag,.feedback-enter .rationale-panel\{animation:question-feedback-enter 160ms ease-out\}/);
   assert.match(css, /@keyframes question-feedback-enter\{from\{opacity:\.65;transform:translateY\(3px\)\}to\{opacity:1;transform:translateY\(0\)\}\}/);
+});
+test("hidden conversation keeps the same optional invitation below its existing explanation",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const start=app.indexOf("function renderScenario(");
+  const renderer=app.slice(start,app.indexOf('document.querySelectorAll("[data-view]")',start));
+  const node=data.scenario.nodes[data.scenario.start],main={innerHTML:""};
+  const sandbox={D:data,main,scenarioNode:data.scenario.start,branchChoice:0,history:[],
+    escape:value=>String(value),comp:id=>data.competencies.find(c=>c.id===id),titleLabel:c=>c.title,
+    citation:()=>"<p>Official 2025 sub-competencies</p>",updateShell:()=>{},persist:()=>{},
+    document:{querySelectorAll:()=>[],querySelector:()=>({addEventListener:()=>{}})}};
+  vm.createContext(sandbox);
+  vm.runInContext(app.slice(app.indexOf("const officialReferences ="),app.indexOf("const announce =")),sandbox);
+  vm.runInContext("setupBonusSources=()=>{}",sandbox);
+  vm.runInContext(renderer,sandbox);vm.runInContext("renderScenario()",sandbox);
+  assert.ok(main.innerHTML.indexOf('<details class="competency-reference">')>main.innerHTML.indexOf(node.choices[0].reason));
+  assert.match(main.innerHTML,/Bonus exercise: which competencies and markers are at play\?/);
+  assert.match(main.innerHTML,/class="bonus-invitation-help">Think it through, then expand to review\./);
+  assert.doesNotMatch(main.innerHTML,/<details class="competency-reference"[^>]*open|What competency is at play/);
 });

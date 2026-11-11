@@ -87,6 +87,7 @@ jobs:
           cp assets/share-card.png _site/assets/
           cp assets/coachprep-logo.svg _site/assets/
           cp assets/favicon.svg _site/assets/
+          cp assets/coffee-heart-steam.svg _site/assets/
       - name: Record asset checksums
         run: |
           echo '### Runtime asset SHA-256 checksums' >> "$GITHUB_STEP_SUMMARY"

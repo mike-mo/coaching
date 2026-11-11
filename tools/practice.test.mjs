@@ -11,7 +11,7 @@ function summaryMarkup(result,active=null,inspect=null){
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
   const renderer=app.slice(app.indexOf("function renderSummary("),app.indexOf("function updateShell("));
   const main={innerHTML:""},controls=new Map();
-  const sandbox={P,D,main,result,state:{exam:null,practices:{[result.mode]:result}},active,
+  const sandbox={P,D,main,result,state:{exam:null,adaptive:P.emptyAdaptive(),practices:{[result.mode]:result}},active,
     localStorage:{getItem:()=>null},KEY:"study",lastStored:null,
     modeNames:{recall:"Core competency recall",questions:"Questions",mixed:"Mixed practice"},
     comp:id=>D.competencies.find(c=>c.id===id),titleLabel:context.window.EXAM.titleLabel,
@@ -20,7 +20,9 @@ function summaryMarkup(result,active=null,inspect=null){
     document:{querySelector:selector=>{
       if(selector==="#dismiss-coffee")return null;
       if(["#retry-recall","#include-hinted"].includes(selector) && !main.innerHTML.includes(`id="${selector.slice(1)}"`))return null;
-      if(!controls.has(selector))controls.set(selector,{append:()=>{}});
+      if(!controls.has(selector))controls.set(selector,{append:()=>{},prepend:button=>{
+        controls.get(selector).first=button;controls.set(`#${button.id}`,button);
+      }});
       return controls.get(selector);
     },createElement:()=>({})}};
   vm.createContext(sandbox);
@@ -29,6 +31,445 @@ function summaryMarkup(result,active=null,inspect=null){
   inspect?.({controls,sandbox});
   return main.innerHTML;
 }
+function scoredMixed(rows,items=null){
+  const responses=rows.map(row=>{
+    const r={seconds:4,...(row.type==="recall"?{matched:true,revealed:false,hintCount:0,outcome:"unaided"}:{outcome:"recognition"}),...row,scoreVersion:4};
+    return {...r,score:P.mixedPoints(r)};
+  });
+  items ||= responses.map(r=>({type:r.type,c:r.c,id:r.type==="recall"?`r${r.c}`:D.questions.find(q=>q.c===r.c).id}));
+  const answers=Object.fromEntries(responses.map((r,index)=>[index,{
+    item:items[index],attempt:r.type==="recall" && r.matched?D.competencies[r.c-1].title:"",hints:r.hintCount || 0,
+    done:true,reported:true,revealed:r.revealed || false,matched:r.matched ?? false,outcome:r.outcome,assistLogged:false,
+    selected:r.type==="questions"?D.questions.find(q=>q.id===items[index].id).options.findIndex(o=>o[2]==={recognition:"strongest",reasonable:"reasonable",missed:"less"}[r.outcome]):null,
+    optionOrder:r.type==="questions"?[0,1,2,3]:null,score:r.score,scoreVersion:4,...(r.misplacedC?{misplacedC:r.misplacedC}:{})
+  }]));
+  const index=responses.length,completed=index===items.length;
+  return {version:1,mode:"mixed",mixedScoreVersion:1,completed,elapsedMs:responses.reduce((sum,r)=>sum+r.seconds*1000,0),answerMs:0,responses,
+    snapshot:{view:"recall",scenarioNode:D.scenario.start,branchChoice:null,history:[],reviewIndex:null,
+      session:{type:"mixed",mixedScoreVersion:1,items,index,roundStart:0,roundEnd:items.length,answers,
+        results:responses.map(r=>({type:r.type,outcome:r.outcome,missed:r.outcome==="missed" || r.matched===false && r.type==="recall"}))},
+      active:completed?null:{item:items[index],attempt:"draft",hints:0,revealed:false,done:false,outcome:null,selected:null,assistLogged:false,
+        optionOrder:items[index].type==="questions"?[0,1,2,3]:null}}};
+}
+function integerSaved(rows,mode="mixed",adaptive=false,items=null,policy="integer-10-9-v1"){
+  const p=scoredMixed(rows,items);
+  delete p.mixedScoreVersion;delete p.snapshot.session.mixedScoreVersion;
+  p.mode=mode;p.scorePolicy=policy;
+  const session=p.snapshot.session;session.type=mode;session.scorePolicy=policy;
+  p.snapshot.view=mode==="mixed"?"recall":mode;
+  if(adaptive){
+    p.variant=P.adaptiveVariant;session.adaptiveRound=1;
+    session.items.forEach((item,index)=>{
+      item.step=rows[index]?.step || 1;
+      item.cue=[2,3].includes(item.step)?P.questionWords[item.c][0]:null;
+    });
+  }
+  p.responses.forEach((r,index)=>{
+    r.score=P.integerPoints(r,policy);r.scoreVersion=P.integerScoreVersion(p);
+    const a=session.answers[index];a.score=r.score;a.scoreVersion=r.scoreVersion;
+    if(adaptive){
+      r.step=session.items[index].step;
+      if(r.step<=2){
+        a.choices=[r.c,...D.competencies.filter(c=>c.id!==r.c).map(c=>c.id).slice(0,3)];
+        a.selected=r.revealed?null:r.matched?r.c:a.choices[1];
+      }
+    }
+  });
+  if(adaptive && p.snapshot.active && p.snapshot.active.item.step<=2){
+    const a=p.snapshot.active,c=a.item.c;
+    a.choices=[c,...D.competencies.filter(x=>x.id!==c).map(x=>x.id).slice(0,3)];
+  }
+  return p;
+}
+test("earlier unified scenario points keep their 4 and 60 second boundaries",()=>{
+  assert.equal(P.scoreMaximum("recall"),10);assert.equal(P.scoreMaximum("questions"),9);
+  for(const [seconds,strongest,valid] of [[0,9,8],[3.999,9,8],[4,9,8],[4.001,9,8],[15.2,8,7],[32,7,6],[48.8,5,4],[60,4,3],[61,4,3],[1e6,4,3]]){
+    assert.equal(P.integerPoints({type:"questions",outcome:"recognition",seconds},"integer-10-9-v1"),strongest);
+    assert.equal(P.integerPoints({type:"questions",outcome:"reasonable",seconds},"integer-10-9-v1"),valid);
+    assert.equal(P.integerPoints({type:"questions",outcome:"missed",seconds},"integer-10-9-v1"),0);
+  }
+  for(const seconds of [-1,NaN,Infinity,"4"])assert.throws(()=>P.integerPoints({type:"questions",outcome:"recognition",seconds}));
+  assert.throws(()=>P.integerPoints({type:"scenario",outcome:"explored",seconds:1}));
+  const p=integerSaved([{c:1,type:"questions",seconds:9.7},{c:2,type:"questions",seconds:9.7}],"questions");
+  assert.equal(P.roundScore(p).earned,16,"Add saved integers, never round the combined raw score");
+  assert.equal(P.points("recognition",4),104,"Legacy policy remains available for old drafts");
+  assert.equal(P.mixedPoints({type:"questions",outcome:"recognition",seconds:4}),90);
+});
+test("new scenarios have no time deduction through 16 seconds and retain the 60-second endpoints",()=>{
+  assert.equal(P.scorePolicy,"integer-10-9-v2");
+  assert.equal(P.nameScorePolicy,"integer-10-9-v1");
+  for(const [seconds,strongest,valid] of [[0,9,8],[4,9,8],[15.999,9,8],[16,9,8],[16.001,9,8],[20.4,9,8],[20.4001,8,7],[24.8,8,7],[38,7,6],[59.999,4,3],[60,4,3],[61,4,3]]){
+    for(const [outcome,expected] of [["recognition",strongest],["reasonable",valid],["missed",0]]){
+      assert.equal(P.integerPoints({type:"questions",outcome,seconds}),expected,`${outcome} at ${seconds}s`);
+    }
+  }
+  for(let seconds=0;seconds<=120;seconds+=0.25){
+    for(const outcome of ["recognition","reasonable","missed"]){
+      const score=P.integerPoints({type:"questions",outcome,seconds});
+      assert.ok(Number.isInteger(score) && score>=0 && score<=9);
+    }
+  }
+  assert.throws(()=>P.integerPoints({type:"questions",outcome:"recognition",seconds:16},"unknown"),/Invalid integer scoring policy/);
+  assert.equal(P.integerPoints({type:"questions",outcome:"recognition",seconds:16},"integer-10-9-v1"),8);
+  assert.equal(P.isIntegerScored({mode:"recall",scorePolicy:P.scorePolicy}),false,"Name practice keeps its existing policy");
+});
+test("new timing stores integer version6 consistently in cards, summaries and comparison baselines",()=>{
+  for(const mode of ["questions","mixed"]){
+    const rows=mode==="questions"?[{c:1,type:"questions",seconds:16},{c:2,type:"questions",seconds:60}]:
+      [{c:1,type:"recall",outcome:"assisted",hintCount:1},{c:1,type:"questions",seconds:16}];
+    const p=integerSaved(rows,mode,false,null,P.scorePolicy),total=P.roundScore(p);
+    assert.equal(P.validSaved(p,D),true);
+    assert.deepEqual({...total},mode==="questions"?{earned:13,maximum:18}:{earned:15,maximum:19});
+    assert.match(summaryMarkup(p),mode==="questions"?/<strong>72%<\/strong>/:/<strong>79%<\/strong>/);
+    assert.match(summaryMarkup(p),/through 16 seconds/);
+    assert.ok(p.responses.every(r=>r.scoreVersion===6 && p.snapshot.session.answers[p.responses.indexOf(r)].score===r.score));
+    const old=integerSaved(rows,mode);
+    assert.match(summaryMarkup(old),/through 4 seconds/);
+    const metric=P.roundMetric(p);
+    assert.equal(metric.scheme,`${mode}-integer-10-9-v2`);
+    assert.equal(P.validBaselines({[mode]:metric}),true);
+    assert.equal(P.validBaselines({[mode==="mixed"?"questions":"mixed"]:metric}),false);
+    assert.equal(P.improves(metric,P.roundMetric(old)),false);
+    assert.equal(P.improves(metric,metric),true);
+    for(const mutate of [
+      p=>p.responses[0].scoreVersion=5,p=>p.snapshot.session.answers[0].scoreVersion=5,
+      p=>p.snapshot.session.scorePolicy="integer-10-9-v1",
+      p=>{delete p.scorePolicy;delete p.snapshot.session.scorePolicy;}
+    ]){
+      const changed=JSON.parse(JSON.stringify(p));mutate(changed);
+      assert.equal(P.validSaved(changed,D),false);
+    }
+    const feedback=JSON.parse(JSON.stringify(p));feedback.completed=false;
+    feedback.snapshot.session.index=1;feedback.snapshot.session.results.pop();
+    feedback.snapshot.active=feedback.snapshot.session.answers[1];
+    assert.equal(P.validSaved(feedback,D),true);
+    feedback.snapshot.reviewIndex=0;
+    assert.equal(P.validSaved(JSON.parse(JSON.stringify(feedback)),D),true);
+  }
+});
+test("both integer timing policies retain draft and queued round bounds without changing earned scores",()=>{
+  const items=D.questions.slice(0,9).map(q=>({c:q.c,id:q.id,type:"questions"}));
+  for(const policy of ["integer-10-9-v1",P.scorePolicy]){
+    const rows=items.slice(0,8).map(item=>({...item,seconds:16}));
+    const p=integerSaved(rows,"questions",false,items,policy);
+    const original=JSON.stringify(p.responses);
+    p.completed=true;p.snapshot.active=null;p.snapshot.session.roundEnd=8;
+    assert.equal(P.validSaved(p,D),true);
+    assert.equal(P.roundScore(p).earned,policy===P.scorePolicy?72:64);
+    assert.equal(P.roundScore(p).maximum,72);
+    const loaded=JSON.parse(JSON.stringify(p));
+    assert.equal(P.migrateScores(loaded),loaded);
+    assert.equal(JSON.stringify(loaded.responses),original);
+    assert.equal(P.scenarioGrace(loaded),policy===P.scorePolicy?16:4);
+    assert.equal(P.integerScoreVersion(loaded),policy===P.scorePolicy?6:5);
+  }
+});
+test("unified name points ignore speed and built-in format cues but retain every hint deduction",()=>{
+  for(let hintCount=0;hintCount<=10;hintCount++){
+    const expected=[10,6,4,3,2,1][Math.min(hintCount,5)];
+    for(let step=1;step<=4;step++){
+      const base={c:1,type:"recall",matched:true,revealed:false,hintCount,step,cue:step===3?"Ethical":null};
+      assert.equal(P.integerPoints({...base,seconds:0}),expected);
+      assert.equal(P.integerPoints({...base,seconds:1e6}),expected);
+      assert.equal(P.integerPoints({...base,matched:false,misplacedC:2}),1);
+      assert.equal(P.integerPoints({...base,matched:false}),0);
+      assert.equal(P.integerPoints({...base,matched:false,revealed:true}),0);
+    }
+  }
+  const adaptive=integerSaved(D.competencies.map((c,i)=>({c:c.id,type:"recall",step:i%4+1})),"recall",true);
+  assert.equal(P.validSaved(adaptive,D),true);
+  assert.equal(P.roundScore(adaptive).earned,80,"Choice lists and core-word cues are not extra hints");
+});
+test("all unified scored modes share exact totals, cards and whole-percent headlines",()=>{
+  for(const [mode,types,maximum] of [
+    ["recall",Array(8).fill("recall"),80],
+    ["questions",Array(8).fill("questions"),72],
+    ["mixed",Array.from({length:8},(_,i)=>i%2?"questions":"recall"),76]
+  ]){
+    const rows=types.map((type,i)=>({type,c:i+1,...(type==="recall"?{step:i%4+1}:{}),seconds:4}));
+    const p=integerSaved(rows,mode,mode==="recall");
+    assert.equal(P.validSaved(p,D),true);
+    assert.deepEqual({...P.roundScore(p)},{earned:maximum,maximum});
+    const html=summaryMarkup(p);
+    assert.match(html,/<strong>100%<\/strong>/);
+    assert.ok(html.includes(`${maximum} / ${maximum} practice points`));
+    assert.match(html,/class="stat-top"/);
+    assert.doesNotMatch(html,/Earlier scoring|0 valid|0 to improve/);
+    assert.equal(summaryMarkup(JSON.parse(JSON.stringify(p))),html);
+    const one=integerSaved(rows.slice(0,1),mode,mode==="recall",p.snapshot.session.items);
+    assert.equal(P.validSaved(one,D),true);
+    assert.equal(P.roundScore(one).maximum,maximum);
+    assert.ok(summaryMarkup(one).includes(`<strong>${Math.round(P.scoreMaximum(types[0])/maximum*100)}%</strong>`));
+    assert.match(summaryMarkup(one),/includes unanswered items/);
+  }
+  const combined=integerSaved([{type:"recall",c:1,outcome:"assisted",hintCount:1},{type:"questions",c:1,seconds:60}]);
+  assert.deepEqual({...P.roundScore(combined,1)},{earned:10,maximum:19});
+  assert.match(summaryMarkup(combined),/<strong>53%<\/strong>/);
+  assert.match(summaryMarkup(combined),/10 \/ 19/);
+  assert.match(summaryMarkup(combined),/recall-assisted mixed-stat/);
+});
+test("unified saved answers reject missing markers, changed points and incompatible caches",()=>{
+  for(const mode of ["recall","questions","mixed"]){
+    const rows=mode==="questions"?[{c:1,type:"questions",seconds:32}]:[{c:1,type:"recall",step:4,hintCount:1,outcome:"assisted"}];
+    const p=integerSaved(rows,mode,mode==="recall");
+    for(const mutate of [
+      p=>delete p.scorePolicy,p=>delete p.snapshot.session.scorePolicy,
+      p=>p.scorePolicy="integer-10-9-v2",p=>p.mixedScoreVersion=1,
+      p=>p.responses[0].score++,p=>p.responses[0].scoreVersion=mode==="recall"?3:2,
+      p=>p.snapshot.session.answers[0].score++,p=>delete p.snapshot.session.answers[0].scoreVersion
+    ]){
+      const changed=JSON.parse(JSON.stringify(p));mutate(changed);
+      assert.equal(P.validSaved(changed,D),false,String(mutate));
+    }
+    const feedback=JSON.parse(JSON.stringify(p));feedback.completed=false;
+    feedback.snapshot.session.index=0;feedback.snapshot.session.results=[];
+    feedback.snapshot.active=feedback.snapshot.session.answers[0];
+    assert.equal(P.validSaved(feedback,D),true);
+    feedback.snapshot.reviewIndex=0;
+    assert.equal(P.validSaved(feedback,D),true,"Locked feedback/review keeps the same integer");
+    assert.equal(P.migrateScores(p),p);
+  }
+});
+test("unified comparison schemes keep old standalone, Mixed and adaptive baselines separate",()=>{
+  for(const mode of ["questions","mixed","recall"]){
+    const p=integerSaved([{c:1,type:mode==="questions"?"questions":"recall"}],mode);
+    const metric=P.roundMetric(p);
+    assert.equal(metric.scheme,`${mode}-integer-10-9-v1`);
+    assert.equal(P.validBaselines({[mode]:metric}),true);
+    assert.equal(P.improves(metric,{scheme:mode==="recall"?"recall-unaided-v1":`${mode}-bonus14-v1`,score:0}),false);
+    assert.equal(P.improves(metric,metric),true);
+    assert.equal(P.validBaselines({exam:metric}),false);
+  }
+  const p=integerSaved(D.competencies.map(c=>({c:c.id,type:"recall",step:4})),"recall",true);
+  const current=P.adaptiveMetric(p),previous={signature:current.signature,score:0};
+  assert.equal(current.scheme,"adaptive-integer-10-v1");
+  const progress={...P.emptyAdaptive(),previousRound:current};
+  assert.equal(P.validAdaptive(progress),true);
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const sandbox={P,flow:p,session:p.snapshot.session,stash:()=>{},
+    state:{adaptive:{...progress,completed:true,previousRound:previous},previousRounds:{},completedModes:{}}};
+  vm.createContext(sandbox);vm.runInContext(app.slice(app.indexOf("function recordCompletion("),app.indexOf("function confetti(")),sandbox);
+  assert.equal(vm.runInContext("recordCompletion().celebrate",sandbox),false);
+  assert.equal(sandbox.state.adaptive.previousRound.scheme,"adaptive-integer-10-v1");
+  p.snapshot.session.retry=true;
+  assert.equal(P.adaptiveMetric(p),null);
+});
+test("unified submission freezes points and step metadata before saved review",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const code=app.slice(app.indexOf("function noteResponse("),app.indexOf("function startMode("));
+  for(const [mode,type] of [["recall","recall"],["questions","questions"],["mixed","recall"],["mixed","questions"]]){
+    const sandbox={P,flow:{mode,scorePolicy:mode==="recall"?P.nameScorePolicy:P.scorePolicy,responses:[]},
+      active:{item:{type,c:1,...(mode==="recall"?{step:3}:{})},done:true,hints:0,matched:type==="recall",revealed:false,outcome:type==="recall"?"unaided":"recognition"},
+      session:{index:0,answers:{}},answerTime:()=>32000,usage:null,answerStarted:null};
+    vm.createContext(sandbox);vm.runInContext(code,sandbox);vm.runInContext("noteActive();noteActive()",sandbox);
+    const row=sandbox.flow.responses[0],cache=sandbox.session.answers[0];
+    assert.equal(sandbox.flow.responses.length,1);
+    assert.equal(row.score,type==="recall"?10:7);
+    assert.equal(row.scoreVersion,mode==="recall"?5:6);assert.equal(cache.score,row.score);assert.equal(cache.scoreVersion,row.scoreVersion);
+    if(mode==="recall")assert.equal(row.step,3);
+  }
+});
+test("Mixed quality and speed share the 90-point cap without changing standalone points",()=>{
+  assert.equal(P.mixedMaximum("recall"),100);assert.equal(P.mixedMaximum("questions"),90);
+  assert.throws(()=>P.mixedMaximum("scenario"),/Invalid Mixed/);
+  for(const [outcome,fast,slow] of [["recognition",90,78],["reasonable",81,69],["missed",0,0]]){
+    let previous=Infinity;
+    for(const seconds of [0,3.999,4,4.001,18,31.25,59.999,60,61,100000]){
+      const actual=P.mixedPoints({type:"questions",outcome,seconds});
+      assert.equal(actual,Math.round(P.points(outcome,seconds)*90/104));
+      assert.ok(Number.isInteger(actual) && actual>=0 && actual<=90);
+      assert.ok(actual<=previous);previous=actual;
+    }
+    assert.equal(P.mixedPoints({type:"questions",outcome,seconds:4}),fast);
+    assert.equal(P.mixedPoints({type:"questions",outcome,seconds:60}),slow);
+  }
+  assert.equal(P.points("recognition",4),104);
+  assert.equal(P.points("reasonable",4),94);
+});
+test("Mixed name deductions scale consistently, including hints, wrong order and Pass",()=>{
+  const expected=[100,60,40,30,20,10,10,10,10,10,10];
+  for(let hintCount=0;hintCount<=10;hintCount++){
+    const base={type:"recall",hintCount,revealed:false,matched:true};
+    assert.equal(P.mixedPoints(base),expected[hintCount]);
+    assert.equal(P.mixedPoints({...base,matched:false,misplacedC:2}),10);
+    assert.equal(P.mixedPoints({...base,matched:false}),0);
+    assert.equal(P.mixedPoints({...base,matched:false,revealed:true}),0);
+    assert.equal(P.recallPoints(base),expected[hintCount]/10);
+  }
+});
+test("Mixed totals sum saved integers and actual caps across categories and partial rounds",()=>{
+  const rows=[{c:1,type:"recall",outcome:"assisted",hintCount:1},{c:1,type:"questions",seconds:18},
+    {c:2,type:"questions",outcome:"missed"},{c:3,type:"recall",matched:false,revealed:true,outcome:"assisted"}];
+  const full=scoredMixed(rows),expected=rows.map(r=>P.mixedPoints({seconds:4,matched:true,revealed:false,hintCount:0,outcome:"recognition",...r}));
+  assert.equal(P.validSaved(full,D),true);
+  assert.deepEqual({...P.mixedScore(full)},{earned:expected.reduce((a,b)=>a+b),maximum:380});
+  assert.deepEqual({...P.mixedScore(full,1)},{earned:expected[0]+expected[1],maximum:190});
+  assert.equal(P.mixedScore(full,8),null);
+  assert.equal(P.roundMetric(full).score,P.mixedScore(full).earned/380);
+  const partial=scoredMixed(rows.slice(0,1),full.snapshot.session.items);
+  assert.equal(P.validSaved(partial,D),true);
+  assert.deepEqual({...P.mixedScore(partial)},{earned:60,maximum:380});
+  assert.equal(P.roundMetric(partial),null,"A partial round is not a comparable result");
+  const eight=scoredMixed(D.competencies.map((c,i)=>({c:c.id,type:i%2?"questions":"recall"})));
+  assert.equal(P.mixedScore(eight).maximum,760);
+  assert.equal(P.mixedScore(eight).earned,760);
+  assert.equal(P.roundMetric(eight).score,1);
+});
+test("Mixed scoring survives draft, feedback and locked review reload with explicit version markers",()=>{
+  const full=scoredMixed([{c:1,type:"recall",outcome:"assisted",hintCount:1},{c:2,type:"questions",outcome:"reasonable",seconds:31}]);
+  assert.equal(P.validSaved(JSON.parse(JSON.stringify(full)),D),true);
+  assert.equal(P.migrateScores(full),full,"Saved points are never recalculated");
+  const feedback=JSON.parse(JSON.stringify(full));
+  feedback.completed=false;
+  feedback.snapshot.session.index--;
+  feedback.snapshot.session.results.pop();
+  feedback.snapshot.active=feedback.snapshot.session.answers[1];
+  assert.equal(P.validSaved(feedback,D),true);
+  const review=JSON.parse(JSON.stringify(feedback));review.snapshot.reviewIndex=0;
+  assert.equal(P.validSaved(review,D),true);
+  for(const mutation of [
+    p=>delete p.mixedScoreVersion,p=>delete p.snapshot.session.mixedScoreVersion,
+    p=>p.mixedScoreVersion=2,p=>p.responses[0].score=6,p=>p.responses[1].score=104,
+    p=>p.responses[1].score=.5,p=>p.responses[0].scoreVersion=2,
+    p=>delete p.responses[0].hintCount,p=>p.responses[0].c=8,
+    p=>p.snapshot.session.answers[0].score=100,p=>p.snapshot.session.answers[0].hints=0,
+    p=>p.snapshot.session.answers[0].outcome="unaided",
+    p=>delete p.snapshot.session.answers[0].scoreVersion
+  ]){
+    const changed=JSON.parse(JSON.stringify(full));mutation(changed);
+    assert.equal(P.validSaved(changed,D),false,String(mutation));
+  }
+  const draft=scoredMixed([],full.snapshot.session.items);
+  assert.equal(P.validSaved(draft,D),true);
+  draft.snapshot.active.score=100;draft.snapshot.active.scoreVersion=4;
+  assert.equal(P.validSaved(draft,D),false,"Unsubmitted drafts cannot carry awarded points");
+});
+test("Mixed summaries share layout, hide zero categories and reflect the worst included outcome",()=>{
+  const result=scoredMixed([
+    {c:1,type:"recall"},{c:1,type:"questions",outcome:"missed"},
+    {c:2,type:"recall",outcome:"assisted",hintCount:1},
+    {c:3,type:"questions",outcome:"reasonable",seconds:18},
+    {c:4,type:"recall",matched:false,revealed:true,outcome:"assisted",hintCount:2},
+    {c:5,type:"recall",matched:false,misplacedC:6,outcome:"missed"}
+  ]);
+  const html=summaryMarkup(result);
+  assert.match(html,/Mixed practice points/);
+  const cards=Array.from(html.matchAll(/<section class="competency-stat[^"]*">[\s\S]*?<\/section>/g),m=>m[0]);
+  assert.match(cards[0],/recall-missed mixed-stat/);
+  assert.match(cards[0],/100 \/ 190/);
+  assert.match(cards[0],/Scenarios: 1 to improve/);
+  assert.match(cards[0],/2 answered · average answer time/);
+  assert.match(cards[1],/recall-assisted mixed-stat/);assert.match(cards[1],/60 \/ 100/);
+  assert.match(cards[2],/recall-unaided mixed-stat/);assert.match(cards[2],/1 valid/);
+  assert.match(cards[2],/1 answered · answer time/);
+  assert.match(cards[3],/recall-missed mixed-stat/);assert.match(cards[3],/Pass: answer revealed/);
+  assert.match(cards[3],/0 \/ 100/);
+  assert.match(cards[4],/recall-misplaced mixed-stat/);assert.match(cards[4],/10 \/ 100/);
+  assert.doesNotMatch(html,/\b0 (?:strongest|valid|to improve|correct|passed|need another look)/);
+  assert.doesNotMatch(html,/1 answered · average answer time|Earlier name points|Earlier question points/);
+  assert.equal(html,summaryMarkup(JSON.parse(JSON.stringify(result))));
+  const single=summaryMarkup(scoredMixed([{c:3,type:"questions",seconds:18}]));
+  assert.match(single,/<span>Answer time<\/span>/);
+});
+test("legacy Mixed scores and drafts stay in earlier units without a fabricated total",()=>{
+  const fresh=scoredMixed([{c:1,type:"recall"},{c:1,type:"questions",seconds:4}]);
+  const legacy=JSON.parse(JSON.stringify(fresh));
+  delete legacy.mixedScoreVersion;delete legacy.snapshot.session.mixedScoreVersion;
+  legacy.responses.forEach(r=>{r.scoreVersion=2;r.score=r.type==="recall"?10:104;});
+  Object.values(legacy.snapshot.session.answers).forEach(a=>{delete a.score;delete a.scoreVersion;});
+  assert.equal(P.validSaved(legacy,D),true);
+  const html=summaryMarkup(legacy);
+  assert.match(html,/Earlier scoring/);assert.match(html,/Earlier name points<\/small>10 \/ 10/);
+  assert.match(html,/Earlier question points<\/small>104/);
+  assert.doesNotMatch(html,/Mixed practice points|Practice points<\/small>/);
+  assert.equal(P.mixedScore(legacy),null);
+  const before=JSON.stringify(legacy);
+  assert.equal(P.migrateScores(legacy),legacy);summaryMarkup(legacy);
+  assert.equal(JSON.stringify(legacy),before);
+  const draft=JSON.parse(before);
+  draft.completed=false;draft.snapshot.session.index=1;draft.snapshot.session.results.pop();
+  delete draft.snapshot.session.answers[1];draft.responses.pop();
+  draft.snapshot.active={...fresh.snapshot.session.answers[1],done:false,reported:false,outcome:null,selected:null};
+  delete draft.snapshot.active.score;delete draft.snapshot.active.scoreVersion;
+  assert.equal(P.validSaved(draft,D),true);
+});
+test("Mixed submissions save the rounded score before feedback snapshots and never score twice",()=>{
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const helpers=app.slice(app.indexOf("function noteResponse("),app.indexOf("function startMode("));
+  for(const mode of ["mixed","questions","recall"]){
+    for(const type of ["questions","recall"]){
+      const sandbox={P,flow:{mode,responses:[],...(mode==="mixed"?{mixedScoreVersion:1}:{})},
+        active:{item:{type,c:1,id:type==="recall"?"r1":D.questions[0].id},outcome:type==="recall"?"assisted":"recognition",matched:type==="recall",hints:1,done:true,revealed:false},
+        session:{index:0,answers:{}},answerStarted:null,answerTime:()=>18000,usage:null,usageMode:value=>value};
+      vm.createContext(sandbox);vm.runInContext(helpers,sandbox);
+      vm.runInContext("noteActive();noteActive()",sandbox);
+      assert.equal(sandbox.flow.responses.length,1);
+      const row=sandbox.flow.responses[0];
+      assert.equal(row.score,mode==="mixed"?P.mixedPoints(row):type==="recall"?6:P.points("recognition",18));
+      assert.equal(row.scoreVersion,mode==="mixed"?4:2);
+      if(mode==="mixed"){
+        assert.equal(sandbox.session.answers[0].score,row.score);
+        assert.equal(sandbox.session.answers[0].scoreVersion,4);
+      }
+    }
+  }
+});
+test("Mixed comparison versions never celebrate an incompatible earlier baseline",()=>{
+  const result=scoredMixed([{c:1,type:"recall"},{c:2,type:"questions"}]),metric=P.roundMetric(result);
+  assert.equal(metric.scheme,"mixed-100-90-v1");
+  assert.equal(P.validBaselines({mixed:metric}),true);
+  assert.equal(P.validBaselines({questions:metric}),false);
+  assert.equal(P.improves(metric,{scheme:"mixed-bonus14-v1",score:.5}),false);
+  assert.equal(P.improves(metric,{...metric,score:.5}),true);
+  const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
+  const fn=app.slice(app.indexOf("function recordCompletion("),app.indexOf("function confetti("));
+  const sandbox={P,flow:result,session:result.snapshot.session,stash:()=>{},
+    state:{previousRounds:{mixed:{scheme:"mixed-bonus14-v1",score:.1}},completedModes:{mixed:true}}};
+  vm.createContext(sandbox);vm.runInContext(fn,sandbox);
+  assert.equal(vm.runInContext("recordCompletion().celebrate",sandbox),false);
+  assert.equal(sandbox.state.previousRounds.mixed.scheme,"mixed-100-90-v1");
+  assert.equal(vm.runInContext("recordCompletion()",sandbox),null);
+});
+test("summary X shares the different-mode handler in every shared and adaptive variant",()=>{
+  const ordinary={completed:false,elapsedMs:0,responses:[],snapshot:{}};
+  const adaptive={...ordinary,mode:"recall",variant:P.adaptiveVariant,
+    snapshot:{session:{items:[{id:"r1",c:1,type:"recall",step:1}],answers:{}}}};
+  for(const result of [...["recall","questions","mixed","scenario","exam"].map(mode=>({...ordinary,mode})),adaptive]){
+    const before=JSON.stringify(result);
+    const html=summaryMarkup(result,null,({controls,sandbox})=>{
+      const other=controls.get(P.isAdaptive(result)?"#adaptive-home":"#summary-home"),close=controls.get("#close-summary");
+      assert.equal(close.onclick,other.onclick,"Both controls invoke the identical handler");
+      let homes=0,focuses=0;
+      sandbox.renderHome=()=>{homes++;};sandbox.focus=()=>{focuses++;};
+      sandbox.launchFocus={isConnected:true,focus:()=>{focuses++;}};
+      close.onclick();
+      assert.equal(homes,1);assert.equal(focuses,1);
+      assert.equal(vm.runInContext("flow",sandbox),null);assert.equal(vm.runInContext("view",sandbox),"home");
+    });
+    assert.match(html,/class="study-close" id="close-summary" aria-label="Close session results and practice a different mode"/);
+    assert.match(html,/Practice a different mode/);
+    assert.equal(JSON.stringify(result),before,"Leaving results never changes saved answers");
+  }
+});
+test("summary actions preserve review, different-mode and forward order without mislabelling resume",()=>{
+  for(const completed of [false,true]){
+    const result=scoredMixed([{c:1,type:"recall"}]);result.completed=completed;
+    const html=summaryMarkup(result,null,({controls})=>{
+      assert.equal(controls.get(".summary-actions").first,controls.get("#review-round"));
+      assert.equal(controls.get("#review-round").textContent,"< Review your answers");
+    });
+    assert.ok(html.indexOf('id="summary-home"')<html.indexOf('id="resume-practice"'));
+    assert.match(html,completed?/Start a new round &gt;/:/Resume mixed practice &gt;/);
+    if(!completed)assert.doesNotMatch(html,/Start a new round/);
+    const adaptive={...result,mode:"recall",variant:P.adaptiveVariant,responses:[],
+      snapshot:{session:{items:[{id:"r1",c:1,type:"recall",step:1}],answers:{}}}};
+    const adaptiveHtml=summaryMarkup(adaptive);
+    assert.ok(adaptiveHtml.indexOf('id="adaptive-review"')<adaptiveHtml.indexOf('id="adaptive-home"'));
+    assert.ok(adaptiveHtml.indexOf('id="adaptive-home"')<adaptiveHtml.indexOf('id="adaptive-resume"'));
+    assert.match(adaptiveHtml,/id="adaptive-review" hidden>&lt; Review your answers/);
+    assert.match(adaptiveHtml,completed?/Start a new round &gt;/:/Resume &gt;/);
+  }
+});
 test("Pass and nonmatching names have distinct missed labels without guessing legacy intent",()=>{
   assert.equal(P.recallMissLabel({revealed:true,matched:false,outcome:"assisted"}),"Pass: answer revealed");
   assert.equal(P.recallMissLabel({revealed:false,matched:false,outcome:"assisted"}),"Name did not match");
@@ -494,7 +935,7 @@ test("recall feedback focuses Continue and echoes only wrong submitted answers",
       vm.runInContext("renderRecall()",sandbox);
       assert.doesNotMatch(card.innerHTML,/Hints share one line|hint-help|A hint shows one word/);
       assert.match(card.innerHTML,/First letter, Next word and Core word offer different clues/);
-      if(kind.includes("pass"))pass.onclick();
+      if(kind.includes("pass")){pass.onclick();assert.equal(a.matched,false,"A saved Pass has an explicit non-match for Mixed review");}
       else form.onsubmit({preventDefault:()=>{prevented=true;}});
       assert.equal(focused,"continue");
       assert.equal(a.done,true);
@@ -611,7 +1052,7 @@ test("external progress updates refresh idle results but preserve active drafts 
 });
 test("saved answer review rejects removed or replaced rounds, including before a storage event",()=>{
   const app=readFileSync(new URL("../app.js",import.meta.url),"utf8");
-  const start=app.indexOf("reviewButton.onclick=()=>{"),end=app.indexOf('document.querySelector(".summary-actions").append',start);
+  const start=app.indexOf("reviewButton.onclick=()=>{"),end=app.indexOf('document.querySelector(".summary-actions").prepend',start);
   const handler=app.slice(app.indexOf("function storedRoundIsCurrent("),app.indexOf("function updateShell("))+app.slice(start,end);
   for(const kind of ["missing","replaced","external","unavailable","valid"]){
     const saved={snapshot:{}},button={},calls=[];
@@ -633,7 +1074,7 @@ test("returning to current feedback focuses visible selected response or recall 
     for(const done of [false,true]){
       const calls=[],sandbox={flow:{completed:false},finishPracticeEntry:null,reviewIndex:0,clockStarted:null,answerStarted:null,
         active:{done,item:{type}},session:{index:1},performance:{now:()=>100},
-        renderStudy:()=>calls.push("render"),focusRecallContinue:()=>calls.push("continue"),
+        renderStudy:()=>calls.push("render"),focusRecallContinue:()=>calls.push("continue"),focusAdaptiveAnswer:()=>false,
         focus:(selector,visible)=>{
           assert.equal(visible,true);
           assert.equal(selector,type==="questions"&&done?".answer-card.selected summary":"#recall-input,.scenario-prompt,#study-card h3");
@@ -780,7 +1221,7 @@ test("C3 consolation summaries distinguish wrong order in recall, Mixed and evid
       assert.match(html,/C3\. Establishes and Maintains Agreements/);
       assert.match(html,/Recognized competency, wrong order/);
       assert.match(html,/You named C2\. Embodies a Coaching Mindset\. This position is C3\./);
-      assert.match(html,/Name recall practice score: 1 \/ 10/);
+      assert.match(html,mode==="mixed"?/Earlier name points<\/small>1 \/ 10/:/Name recall practice score: 1 \/ 10/);
       assert.doesNotMatch(html,/Wrong \/ passed/);
       if(outcome==="assisted")assert.match(html,/>With hints</);
       const reloaded=summaryMarkup(JSON.parse(JSON.stringify(result)));
