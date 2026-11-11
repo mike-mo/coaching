@@ -851,7 +851,7 @@ test("three distinct local calendar days, not loads or consecutive days",()=>{
 test("coffee storage failures are explicit and do not claim a dismissal",()=>{
   const errors=[],store=new Map();
   let fail=false;
-  const coffee=P.coffee({getItem:k=>store.get(k)??null,setItem:(k,v)=>{if(fail)throw Error("full");store.set(k,v);}},e=>errors.push(e));
+  const coffee=P.coffee({getItem:k=>store.get(k)??null,setItem:(k,v)=>{if(fail)throw Error("full");store.set(k,v);}},e=>errors.push(e),()=>new Date(),()=>["2026-01-01","2026-01-03","2026-01-10"]);
   assert.equal(coffee.visit(),true);
   store.set(coffee.key,JSON.stringify({version:1,days:["2026-01-01","2026-01-03","2026-01-10"],dismissed:null}));
   assert.equal(coffee.eligible(),true);assert.equal(coffee.dismiss(),true);assert.equal(coffee.eligible(),false);

@@ -31,6 +31,6 @@ test("About retains accessible X, theme and privacy controls with focus restorat
   for(const id of ["about-title","theme-select","theme-help","usage-opt-out","usage-status"])assert.ok(about.includes(`id="${id}"`));
   assert.match(app,/about\.addEventListener\("close",/);
   assert.match(app,/closeAbout\.focus\(\)/);
-  assert.match(html,/aria-label="Treat me to a coffee \(opens a new tab\)"><img[^>]+alt="">Treat me to a coffee/);
+  assert.match(html,/aria-label="Treat me to a coffee\? \(opens a new tab\)"><img[^>]+alt="">Treat me to a coffee\?<\/a>/);
   assert.match(html,/href="https:\/\/buymeacoffee\.com\/mikemo" target="_blank" rel="noopener noreferrer"/);
 });

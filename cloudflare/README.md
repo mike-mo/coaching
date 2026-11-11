@@ -22,7 +22,7 @@ The existing `smartify.space/coaching*` route must also stay attached to this Wo
 1. Update `coaching-pages-proxy` with the exact contents of `cloudflare/worker.mjs` as its main ES module, using the compatibility date above.
 2. Add the Worker route `smartify.space/coachprep*` on the existing `smartify.space` zone. Cloudflare route matching includes query strings, so the trailing wildcard also covers `/coachprep?v=10`.
 3. Keep the apex DNS record, existing Cloudflare Tunnel and GitHub Pages configuration unchanged. Leave the GitHub Pages custom-domain CNAME unset.
-4. Check `/coachprep`, `/coachprep/` and a versioned asset such as `/coachprep/app.js?v=10`. Confirm that `/coachprep-other` still reaches the existing origin.
+4. Check `/coachprep`, `/coachprep/` and a versioned asset such as `/coachprep/app.js?v=46`. Confirm that `/coachprep-other` still reaches the existing origin.
 
 The Worker checks the path boundary itself. Only `/coachprep` and `/coachprep/` descendants use GitHub Pages. Other matched paths pass the original request to the existing origin, including its method, headers and body.
 
@@ -34,7 +34,7 @@ Upstream status, content, content type and caching headers pass through. HTML re
 
 Relative redirects that resolve to the upstream's `/coachprep` path, and absolute redirects to that same origin and path, point back to the custom site. Other redirects are preserved. Network failures are logged and return an uncacheable 502; unrelated-origin passthrough errors are left to Cloudflare's normal handling.
 
-These Worker files and tests are excluded from the GitHub Pages artifact, which includes only the eight runtime files, sharing PNG, selected logo and favicon SVGs. Pages publishes stable releases using the [release and rollback procedure](../README.md#github-pages). Worker deployment remains separate whenever its source changes.
+These Worker files and tests are excluded from the GitHub Pages artifact, which includes only the eight runtime files, sharing PNG, selected logo, favicon and coffee SVGs. Pages publishes stable releases using the [release and rollback procedure](../README.md#github-pages). Worker deployment remains separate whenever its source changes.
 
 ## Analytics setup
 
@@ -118,7 +118,7 @@ Version-2 points use `indexes: ["activity:mode"]`, `blobs: ["activity", mode, "2
 After approval, deploy in this order:
 
 1. Deploy the reviewed Worker source first, retaining both existing routes, bindings, limiter, DNS, HTML/beacon settings and firewall rules. It accepts both old v1 clients and new v2 clients; no dataset migration is required.
-2. Publish the reviewed app snapshot through a new immutable stable release using the existing release-only procedure. The local source references `analytics.js?v=3` and `app.js?v=28`. Releasing the client before updating the Worker would reject v2 requests rather than collect them.
+2. Publish the reviewed app snapshot through a new immutable stable release using the existing release-only procedure. The local source references `analytics.js?v=3` and `app.js?v=46`. Releasing the client before updating the Worker would reject v2 requests rather than collect them.
 3. Read back aggregate rows after ordinary consenting usage. Keep dashboard credentials, snapshots and read queries private. An empty query is no evidence of active users, engagement or a working matched funnel.
 
 For rollback, restore the client first through a new immutable stable release using a known-good earlier app snapshot. Keep this backward-compatible collector deployed while old and new browser tabs coexist. Do not remove v2 acceptance while cached v2 clients can still send; those clients would receive explicit delivery failures. Existing points remain in the dataset regardless of which client is live. Any later collector rollback is a separate approved operation and must retain the existing bindings, routes and limiter.

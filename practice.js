@@ -350,10 +350,13 @@ window.PRACTICE = (() => {
       if(gain>0){comparison=`You're scoring ${gain} percentage point${gain===1?"":"s"} higher than yesterday.`;improved=true;}
       else if(faster>0)comparison=`For the same exercises, today's rounds took ${faster}% less time on average than yesterday.`;
     }
+    const rounds=value.total===1?"a round":`${value.total} rounds`;
+    const period=value.days.length>1?` across ${value.days.length} study days`:value.days[0]===today?" today":"";
     return {heading:improved?"Good progress!":"Enjoying the practice?",
-      progress:value.total?`You've completed ${value.total} round${value.total===1?"":"s"} on ${value.days.length} day${value.days.length===1?"":"s"} since this browser started counting.${comparison?` ${comparison}`:""} Keep it up!`:""};
+      progress:value.total?`You've completed ${rounds}${period}.${comparison?` ${comparison}`:""} Keep it up!`:"",
+      provenance:value.total?"Based on practice saved in this browser since counting began.":""};
   }
-  function coffee(storage,onError,now=()=>new Date()) {
+  function coffee(storage,onError,now=()=>new Date(),studyDays=()=>[]) {
     let value=null,migrate=false;
     function read(){
       try{
@@ -385,7 +388,9 @@ window.PRACTICE = (() => {
     function eligible(total=0){
       if(!Number.isSafeInteger(total) || total<0)throw new Error("Invalid completed round count");
       const date=now();
-      return today(date) && value.days.length===3 && (!value.cooldown || day(date)>value.cooldown.day ||
+      if(!today(date))return false;
+      const days=studyDays();
+      return Array.isArray(days) && days.every(validDay) && new Set(days).size>=3 && (!value.cooldown || day(date)>value.cooldown.day ||
         value.cooldown.kind==="dismiss" && total-value.cooldown.rounds>=3);
     }
     return {
@@ -500,5 +505,5 @@ window.PRACTICE = (() => {
     if(p.mode==="scenario" && (p.responses.length!==s.history.length+(s.branchChoice!==null?1:0) || p.completed!==(s.scenarioNode===null)))return false;
     return true;
   }
-  return {uiVersion:16,coffeeInvitations,nameScorePolicy,scorePolicy,isIntegerScored,integerScoreVersion,scenarioGrace,scoreMaximum,integerPoints,roundScore,adaptiveVariant,questionWords,stepLabels,adaptiveSuccessMessage,isAdaptive,emptyAdaptive,validAdaptive,adaptiveItem,adaptiveHint,adaptiveResult,adaptiveMetric,recallOutcome,recallMissLabel,recallRetryTargets,recallMisplacement,points,recallPoints,isScoredMixed,mixedMaximum,mixedPoints,mixedScore,recallScore,recallPercentage,recallHintState,nextRecallHint,recallHintText,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,emptySupport,validSupport,ordinaryRound,supportCompletion,supportCopy,coffee,validSaved};
+  return {uiVersion:17,coffeeInvitations,nameScorePolicy,scorePolicy,isIntegerScored,integerScoreVersion,scenarioGrace,scoreMaximum,integerPoints,roundScore,adaptiveVariant,questionWords,stepLabels,adaptiveSuccessMessage,isAdaptive,emptyAdaptive,validAdaptive,adaptiveItem,adaptiveHint,adaptiveResult,adaptiveMetric,recallOutcome,recallMissLabel,recallRetryTargets,recallMisplacement,points,recallPoints,isScoredMixed,mixedMaximum,mixedPoints,mixedScore,recallScore,recallPercentage,recallHintState,nextRecallHint,recallHintText,earnedPoints,migrateScores,roundResponses,roundMetric,validBaselines,validCompletedModes,improves,duration,day,validDay,validCoffee,visit,emptySupport,validSupport,ordinaryRound,supportCompletion,supportCopy,coffee,validSaved};
 })();
