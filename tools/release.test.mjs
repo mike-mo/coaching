@@ -49,11 +49,11 @@ test("Push and PR validation has no deployment permission, environment or upload
   assert.deepEqual(readdirSync(resolve(root, ".github", "workflows")).sort(), ["ci.yml", "pages.yml"]);
 });
 
-test("Pages artifact allowlist contains exactly the existing eleven runtime files", () => {
+test("Pages artifact allowlist contains exactly the twelve runtime files", () => {
   const commands = [...workflow.matchAll(/^\s+cp (.+) (_site\/(?:assets\/)?)$/gm)];
   const files = commands.flatMap(([, sources]) => sources.split(" ")).sort();
   assert.deepEqual(files, ["index.html", "styles.css", "theme.js", "content.js", "exam.js", "analytics.js",
-    "practice.js", "app.js", "assets/share-card.png", "assets/coachprep-logo.svg", "assets/favicon.svg"].sort());
+    "practice.js", "app.js", "assets/share-card.png", "assets/coachprep-logo.svg", "assets/favicon.svg", "assets/coffee-heart-steam.svg"].sort());
   for (const file of files) assert.ok(statSync(resolve(root, file)).isFile(), file);
   assert.doesNotMatch(workflow, /cp\s+-r|cp\s+.*\*|path:\s*\.(?:\/|\s*$)/m);
   assert.match(workflow, /path: _site/);

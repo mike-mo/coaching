@@ -1,6 +1,6 @@
 "use strict";
 window.STUDY = {
-  uiVersion: 12,
+  uiVersion: 13,
   source: "2025 ICF Core Competencies",
   version: "Released September 2025 · rev. 09.08.25",
   examInstruction: "Write the names of all eight core competencies exactly, in order, then summarize each in three sentences in your own words. After another rehearsal, you can compare your answers with your previous answers.",
@@ -304,7 +304,7 @@ window.STUDY = {
         ["What support or alternative would make the experiment workable if Friday changes?","This follows the client's chosen action, considers barriers and supports learning rather than treating changed circumstances as failure.","strongest"]
       ], answer:3, takeaway:"Design follow-through around the client's real circumstances and learning purpose. This moment calls for feasibility before reminders or accountability."},
     {id:"case-client-accountability", label:"Choosing accountability", c:8, refs:["8.02","8.03"],
-      prompt:"A client has chosen a small experiment and says formal report-backs make them focus on pleasing the coach. They would prefer to notice what they learn privately. What fits best?", options:[
+      prompt:"A client has chosen a small experiment and says giving the coach formal progress updates makes them focus on pleasing the coach. They would prefer to reflect privately on what they learn. How should the coach respond?", options:[
         ["How would you like to notice and keep track of what you learn?","This lets the client design a method that serves their learning rather than the coach's need to receive a report.","strongest"],
         ["Invite them to reflect privately and revisit whether they want to discuss the learning next time.","You respect their preference to reflect privately. Inviting them to choose how they will notice what they learn would make the follow-through clearer.","reasonable"],
         ["Offer a very brief email report so accountability feels less formal.","Less formal reporting is still reporting to the coach. It does not yet respond to the concern the client has identified.","less"],

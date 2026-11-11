@@ -192,7 +192,7 @@ test("reported answers are counted once at submission and never while rendering 
     const calls=[],sandbox={flow:{mode:"mixed",responses:[],answerMs:0},answerStarted:null,session:{index:0,answers:{}},
       active:{reported:false,item:{type,c:1},outcome:"missed",matched:false,revealed:false,hints:0},
       usage:{count:(...args)=>calls.push(args)},usageMode:mode=>mode,answerTime:()=>1000,
-      P:{points:()=>0,recallPoints:()=>0}};
+      P:{points:()=>0,recallPoints:()=>0,isScoredMixed:()=>false,isIntegerScored:()=>false}};
     vm.createContext(sandbox);vm.runInContext(helpers,sandbox);
     vm.runInContext("noteActive();noteActive()",sandbox);
     assert.deepEqual(calls,[["mixed","answered"]]);
