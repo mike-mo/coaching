@@ -62,7 +62,7 @@
   const coffeeWarning=document.querySelector("#coffee-warning");
   const coffee=P.coffee({getItem:key=>localStorage.getItem(key),setItem:(key,value)=>localStorage.setItem(key,value)},message=>{
     coffeeWarning.textContent=message;coffeeWarning.hidden=false;
-  });
+  },()=>new Date(),()=>state.supportHistory?.days || []);
   coffee.visit();
   let coffeeHiddenOn=null,coffeeSummary=null;
   function suppressCoffee(kind){
@@ -337,7 +337,7 @@
       const copy=P.supportCopy(state.supportHistory,result);
       coffeeSummary=result;
       return `<aside id="coffee-reminder" class="coffee-card" aria-labelledby="coffee-heading"><div class="coffee-heading"><img class="coffee-icon" src="assets/coffee-heart-steam.svg" width="48" height="48" alt=""><h2 id="coffee-heading">${escape(copy.heading)}</h2></div>
-        ${copy.progress?`<p id="coffee-progress">${escape(copy.progress)}</p>`:""}<p id="coffee-invitation">${escape(invitation)}</p>
+        ${copy.progress?`<p id="coffee-progress">${escape(copy.progress)}</p><p class="muted"><small>${escape(copy.provenance)}</small></p>`:""}<p id="coffee-invitation">${escape(invitation)}</p>
         <div class="actions"><a id="treat-coffee" href="https://buymeacoffee.com/mikemo" target="_blank" rel="noopener noreferrer" class="coffee-action" aria-label="Treat me to a coffee (opens a new tab)">Treat me to a coffee</a><button id="dismiss-coffee">Not now</button></div></aside>`;
     }
     function bindCoffee(){
@@ -1212,7 +1212,7 @@
   };
   const base=document.currentScript?.src || location.href;
   const assets=[
-    ["practice.js?v=16",window.PRACTICE?.uiVersion===16],
+    ["practice.js?v=17",window.PRACTICE?.uiVersion===17],
     ["exam.js?v=14",window.EXAM?.uiVersion===14],
     ["content.js?v=13",window.STUDY?.uiVersion===13],
     ["styles.css?v=28",!!document.querySelector('link[href="styles.css?v=28"]')]

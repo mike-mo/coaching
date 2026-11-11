@@ -25,9 +25,9 @@ function round({mode="questions",outcome="recognition",policy=P.scorePolicy,step
 }
 function preferences(value={version:1,days:["2026-01-01","2026-01-02","2026-01-03"],dismissed:null}){
   const store=new Map([["coachprep-coffee-days-v1",JSON.stringify(value)]]),errors=[];
-  let now=date("2026-11-10"),fail=false;
-  const coffee=P.coffee({getItem:k=>store.get(k)??null,setItem:(k,v)=>{if(fail)throw Error("full");store.set(k,v);}},e=>errors.push(e),()=>now);
-  return {coffee,store,errors,setDate:d=>{now=d;},fail:()=>{fail=true;}};
+  let now=date("2026-11-10"),fail=false,studyDays=["2026-11-08","2026-11-09","2026-11-10"];
+  const coffee=P.coffee({getItem:k=>store.get(k)??null,setItem:(k,v)=>{if(fail)throw Error("full");store.set(k,v);}},e=>errors.push(e),()=>now,()=>studyDays);
+  return {coffee,store,errors,setDate:d=>{now=d;},setStudyDays:days=>{studyDays=days;},fail:()=>{fail=true;}};
 }
 test("coffee migrates old dates and same-day dismissal without inventing completions",()=>{
   const {coffee,store,setDate}=preferences({version:1,days:["2026-01-01","2026-01-02","2026-01-03"],dismissed:"2026-11-10"});
@@ -37,12 +37,36 @@ test("coffee migrates old dates and same-day dismissal without inventing complet
   setDate(date("2026-11-11"));assert.equal(coffee.eligible(20),true);
   assert.equal(P.emptySupport().total,0);
 });
-test("initial eligibility remains three distinct visiting days",()=>{
+test("initial eligibility requires three completed study days, never visits or same-day rounds",()=>{
   const p=preferences({version:1,days:[],dismissed:null});
+  p.setStudyDays([]);
   assert.equal(p.coffee.eligible(100),false);
+  p.setStudyDays(["2026-11-10"]);
   p.coffee.visit();assert.equal(p.coffee.eligible(100),false);
   p.setDate(date("2026-11-12"));assert.equal(p.coffee.eligible(100),false);
-  p.setDate(date("2026-11-20"));assert.equal(p.coffee.eligible(0),true);
+  p.setDate(date("2026-11-20"));assert.equal(p.coffee.eligible(100),false);
+  p.setStudyDays(["2026-11-10","2026-11-12"]);assert.equal(p.coffee.eligible(100),false);
+  p.setStudyDays(["2026-11-10","2026-11-12","2026-11-20"]);assert.equal(p.coffee.eligible(100),true);
+  const reloaded=preferences(JSON.parse(p.store.get(p.coffee.key)));
+  reloaded.setStudyDays(["2026-11-10"]);assert.equal(reloaded.coffee.eligible(100),false);
+  reloaded.setStudyDays(["2026-11-10","2026-11-12","2026-11-20"]);assert.equal(reloaded.coffee.eligible(100),true);
+  const noVisits=preferences({version:3,days:[],cooldown:null,invitation:null});
+  assert.equal(noVisits.coffee.eligible(3),true,"Completed study days do not require three new visits");
+  for(const days of [null,["2026-11-10","2026-11-10","2026-11-10"],["bad","2026-11-09","2026-11-10"]]){
+    p.setStudyDays(days);assert.equal(p.coffee.eligible(100),false);
+  }
+});
+test("round-count and next-day cooldown expiry never bypass study-day eligibility",()=>{
+  for(const action of ["dismiss","treat"]){
+    const p=preferences();p.coffee[action](1);
+    p.setStudyDays(["2026-11-10"]);
+    assert.equal(p.coffee.eligible(100),false);
+    p.setDate(date("2026-11-11"));
+    assert.equal(p.coffee.eligible(100),false);
+    assert.equal(p.coffee.invitation(100),null);
+    p.setStudyDays(["2026-11-09","2026-11-10"]);assert.equal(p.coffee.eligible(100),false);
+    p.setStudyDays(["2026-11-09","2026-11-10","2026-11-11"]);assert.equal(p.coffee.eligible(100),true);
+  }
 });
 test("treat waits for next local day regardless of completions, reload or rollback",()=>{
   const p=preferences();
@@ -74,7 +98,7 @@ test("cross-tab preference updates are read before any cooldown decision",()=>{
 test("eligibility reads do not rewrite unchanged preferences or clobber another tab's cooldown",()=>{
   const errors=[];
   const value={version:3,days:["2026-01-01","2026-01-02","2026-01-03"],cooldown:null,invitation:null};
-  const coffee=P.coffee({getItem:()=>JSON.stringify(value),setItem:()=>{throw Error("Unexpected preference write");}},e=>errors.push(e),()=>date("2026-11-10"));
+  const coffee=P.coffee({getItem:()=>JSON.stringify(value),setItem:()=>{throw Error("Unexpected preference write");}},e=>errors.push(e),()=>date("2026-11-10"),()=>["2026-11-08","2026-11-09","2026-11-10"]);
   assert.equal(coffee.eligible(3),true);
   assert.equal(errors.length,0);
 });
@@ -120,10 +144,17 @@ test("completion recording counts once and keeps a rollback snapshot with no new
 });
 test("copy handles singular, plural and missing history without fabricated encouragement",()=>{
   assert.equal(P.supportCopy(P.emptySupport(),round()).progress,"");
+  assert.equal(P.supportCopy(P.emptySupport(),round()).provenance,"");
   let value=P.supportCompletion(P.emptySupport(),round(),date("2026-11-10"));
-  assert.match(P.supportCopy(value,round(),date("2026-11-10")).progress,/1 round on 1 day since this browser started counting/);
+  assert.equal(P.supportCopy(value,round(),date("2026-11-10")).progress,"You've completed a round today. Keep it up!");
+  assert.equal(P.supportCopy(value,round(),date("2026-11-11")).progress,"You've completed a round. Keep it up!");
+  assert.equal(P.supportCopy(value,round(),date("2026-11-09")).progress,"You've completed a round. Keep it up!");
+  assert.equal(P.supportCopy(value,round()).provenance,"Based on practice saved in this browser since counting began.");
+  const sameDay=P.supportCompletion(value,round(),date("2026-11-10"));
+  assert.equal(P.supportCopy(sameDay,round(),date("2026-11-10")).progress,"You've completed 2 rounds today. Keep it up!");
+  assert.equal(P.supportCopy(sameDay,round(),date("2026-11-11")).progress,"You've completed 2 rounds. Keep it up!");
   value=P.supportCompletion(value,round(),date("2026-11-12"));
-  assert.match(P.supportCopy(value,round(),date("2026-11-12")).progress,/2 rounds on 2 days/);
+  assert.equal(P.supportCopy(value,round(),date("2026-11-12")).progress,"You've completed 2 rounds across 2 study days. Keep it up!");
   assert.equal(P.supportCopy(value,round(),date("2026-11-12")).heading,"Enjoying the practice?");
 });
 test("positive score comparisons use percentage points, not unlike score units",()=>{
@@ -192,14 +223,15 @@ test("shared and adaptive summaries show B only on finished ordinary rounds",()=
   const code=app.slice(app.indexOf("function renderSummary("),app.indexOf("function updateShell("));
   for(const mode of ["recall","questions","mixed","scenario","exam"]){
     for(const adaptive of mode==="recall"?[false,true]:[false]){
-      for(const kind of ["finished","paused","retry"]){
+      for(const kind of ["finished","finished-counted","paused","retry"]){
         const saved=round({mode:mode==="recall"?"recall":"questions",step:adaptive?1:null});
         if(mode!=="recall")saved.mode=mode;
         if(kind==="paused")saved.completed=false;
         if(kind==="retry")saved.snapshot.session.retry=true;
         const main={innerHTML:""};
         const sandbox={P,D,result:saved,main,active:null,coffeeHiddenOn:null,coffeeSummary:null,
-          state:{exam:null,adaptive:P.emptyAdaptive(),practices:{[mode]:saved},supportHistory:P.emptySupport()},
+          state:{exam:null,adaptive:P.emptyAdaptive(),practices:{[mode]:saved},
+            supportHistory:kind==="finished-counted"?P.supportCompletion(P.emptySupport(),round()):P.emptySupport()},
           coffee:{eligible:()=>true,invitation:()=>P.coffeeInvitations[0]},escape:String,titleLabel:c=>`C${c.id}. ${c.title}`,comp:id=>D.competencies[id-1],
           normalizeTitle:s=>s,modeNames:{},updateNavigation:()=>{},focus:()=>{},
           document:{querySelector:selector=>{
@@ -207,16 +239,39 @@ test("shared and adaptive summaries show B only on finished ordinary rounds",()=
             return {addEventListener:()=>{}};
           }}};
         vm.createContext(sandbox);vm.runInContext(code,sandbox);vm.runInContext("renderSummary(result)",sandbox);
-        const shown=kind==="finished" && ["recall","questions","mixed"].includes(mode);
+        const shown=kind.startsWith("finished") && ["recall","questions","mixed"].includes(mode);
         assert.equal(main.innerHTML.includes('id="coffee-reminder"'),shown,`${mode}/${adaptive}/${kind}`);
         if(shown){
           assert.match(main.innerHTML,/Enjoying the practice\?/);
           assert.match(main.innerHTML,/assets\/coffee-heart-steam.svg/);
           assert.match(main.innerHTML,/Treat me to a coffee/);
           assert.match(main.innerHTML,/A little practice for you, a little coffee for me\?/);
-          assert.doesNotMatch(main.innerHTML,/Keep it up|completed 0|Good progress/);
+          assert.doesNotMatch(main.innerHTML,/completed 0|Good progress|on 1 day|since this browser started counting/);
+          if(kind==="finished-counted"){
+            assert.match(main.innerHTML,/<p id="coffee-progress">You've completed a round today\. Keep it up!<\/p>/);
+            assert.match(main.innerHTML,/<p class="muted"><small>Based on practice saved in this browser since counting began\.<\/small><\/p>/);
+          }else assert.doesNotMatch(main.innerHTML,/Keep it up|Based on practice saved/);
           assert.ok(main.innerHTML.indexOf('id="coffee-reminder"')>main.innerHTML.indexOf('class="recall-total"'));
           assert.ok(main.innerHTML.indexOf('id="coffee-reminder"')<main.innerHTML.indexOf('class="summary-actions'));
+          if(kind==="finished" && mode==="recall"){
+            const store=new Map([["coachprep-coffee-days-v1",JSON.stringify({version:1,
+              days:["2026-01-01","2026-01-02","2026-01-03"],dismissed:null})]]);
+            const warnings=[];
+            sandbox.coffee=P.coffee({getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},
+              message=>warnings.push(message),()=>date("2026-11-10"),()=>sandbox.state.supportHistory.days);
+            for(let dayCount=0;dayCount<=3;dayCount++){
+              let support=P.emptySupport();
+              for(let n=0;n<dayCount;n++)support=P.supportCompletion(support,round(),date(`2026-11-${String(8+n).padStart(2,"0")}`));
+              sandbox.state.supportHistory=support;
+              vm.runInContext("renderSummary(result)",sandbox);
+              assert.equal(main.innerHTML.includes('id="coffee-reminder"'),dayCount>=3,`summary ${adaptive}/${dayCount} study days`);
+              if(dayCount>=3){
+                assert.match(main.innerHTML,/You've completed 3 rounds across 3 study days\. Keep it up!/);
+                assert.match(main.innerHTML,/<p class="muted"><small>Based on practice saved in this browser since counting began\.<\/small><\/p>/);
+              }
+            }
+            assert.deepEqual(warnings,[]);
+          }
         }
       }
     }
@@ -316,7 +371,7 @@ test("exposure writes fail visibly without an unstable fallback or new tracking 
 });
 test("cross-tab reads and resetting learning counts retain the correct next invitation",()=>{
   const p=preferences();p.coffee.invitation(10);
-  const other=P.coffee({getItem:k=>p.store.get(k)??null,setItem:(k,v)=>p.store.set(k,v)},e=>p.errors.push(e),()=>date("2026-11-10"));
+  const other=P.coffee({getItem:k=>p.store.get(k)??null,setItem:(k,v)=>p.store.set(k,v)},e=>p.errors.push(e),()=>date("2026-11-10"),()=>["2026-11-08","2026-11-09","2026-11-10"]);
   assert.equal(other.invitation(10),P.coffeeInvitations[0]);
   assert.equal(p.coffee.invitation(11),P.coffeeInvitations[1]);
   assert.equal(other.invitation(11),P.coffeeInvitations[1]);
